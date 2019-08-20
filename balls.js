@@ -73,7 +73,7 @@ type: type of animation
 	startVx, startVy, //speed of balls at start
 	endX, //end position of balls
 	ballCount, livingBallCount, roundNumber, starCount, noWalls, isRunning, isMuted,
-	ctx, backgroundGradient, icons, audio,
+	ctx, backgroundGradient, icons, audio, disableEject,
 	rAF = window.requestAnimationFrame || window.mozRequestAnimationFrame;
 
 /*
@@ -167,7 +167,39 @@ function initVars () {
 	isMuted = !!getPersistent('muted');
 }
 
+function getRecords () {
+	return JSON.parse(getPersistent('records') || '{}');
+}
+
+function playGame (type) {
+	initSound();
+	initCanvas();
+	play(function () {
+		var msg = ['Game over.'], records = getRecords();
+		if (roundNumber > (records[gameType] || 0)) {
+			records[gameType] = roundNumber;
+			storePersistent('records', JSON.stringify(records));
+			msg.push('New record!');
+		}
+		if (document.monetization && document.monetization.state === 'started') {
+			starCount += 5;
+			storePersistent('stars', starCount);
+			msg.push('', 'As a Web Monetization', 'supporter, you get', '5 extra stars!');
+		}
+		drawLost(msg);
+		playSound('end');
+	}, type);
+}
+
 function initMenu () {
+	function clickHander (e) {
+		var type = e.target.dataset.type;
+		if (type) {
+			menu.removeEventListener('click', clickHander);
+			playGame(type);
+		}
+	}
+
 	var levels = [
 		{type: 'hex', label: 'Easy (Hex)'},
 		{type: 'hex-special', label: 'Surprise (Hex, Special)', stars: 10},
@@ -175,7 +207,7 @@ function initMenu () {
 		{type: 'square-special', label: 'Good Luck (Square, Special)', stars: 30},
 		{type: 'chaos', label: 'Chaos', stars: 40},
 		{type: 'chaos-special', label: 'Special Chaos', stars: 50}
-	], html, records = JSON.parse(getPersistent('records') || '{}');
+	], html, menu, records = getRecords();
 	if (getPersistent('state')) {
 		levels.unshift({type: 'restore', label: 'Resume last game'});
 	}
@@ -188,28 +220,8 @@ function initMenu () {
 
 	html.unshift('<p>Some aliens that tried to invade earth in the past are back. Prevent them from landing there spaceships as long as possible. Collect stars to unlock new levels. Total stars so far: ' + starCount + '</p>');
 	document.body.innerHTML = '<div id="menu">' + html.join('') + '</div>';
-	document.getElementById('menu').addEventListener('click', function (e) {
-		var type = e.target.dataset.type;
-		if (type) {
-			initSound();
-			initCanvas();
-			play(function () {
-				var msg = ['Game over.'];
-				if (roundNumber > (records[gameType] || 0)) {
-					records[gameType] = roundNumber;
-					storePersistent('records', JSON.stringify(records));
-					msg.push('New record!');
-				}
-				if (document.monetization && document.monetization.state === 'started') {
-					starCount += 5;
-					storePersistent('stars', starCount);
-					msg.push('', 'As a Web Monetization', 'supporter, you get', '5 extra stars!');
-				}
-				drawLost(msg);
-				playSound('end');
-			}, type);
-		}
-	});
+	menu = document.getElementById('menu');
+	menu.addEventListener('click', clickHander);
 }
 
 /*
@@ -217,6 +229,9 @@ D. Sound
 This part contains all functions for sound.
 */
 function initSound () {
+	if (audio) {
+		return;
+	}
 	try {
 		audio = new AudioContext();
 	} catch (e) {
@@ -310,6 +325,43 @@ function initCanvas () {
 		}
 	}
 
+	function mousemoveHandler (e) {
+		var action = getAction(e);
+		if (action) {
+			canvas.title = action.title;
+			canvas.style.cursor = 'pointer';
+		} else {
+			canvas.title = '';
+			canvas.style.cursor = '';
+		}
+	}
+
+	function clickHander (e) {
+		var action = getAction(e) || {};
+		switch (action.action) {
+		case 'speed': speedUp(1.5); break;
+		case 'menu':
+			if (disableEject) {
+				disableEject();
+			}
+			window.removeEventListener('resize', resize);
+			canvas.removeEventListener('mousemove', mousemoveHandler);
+			canvas.removeEventListener('click', clickHander);
+			initMenu();
+			break;
+		case 'togglemute':
+			isMuted = !isMuted;
+			if (isMuted) {
+				storePersistent('muted', 1);
+			} else {
+				clearPersistent('muted');
+			}
+			if (!isRunning) {
+				drawPanel();
+			}
+		}
+	}
+
 	document.body.innerHTML = '<canvas moz-opaque></canvas>';
 	canvas = document.getElementsByTagName('canvas')[0];
 	canvas.width = TOTAL_WIDTH;
@@ -388,7 +440,7 @@ function initCanvas () {
 	icons.fillStyle = 'rgb(255,165,100)';
 	icons.fillText('💣', GRID / 2, 13 * GRID / 2, GRID);
 
-	icons.fillStyle = 'black';
+	icons.fillStyle = 'rgb(80,80,80)';
 	icons.beginPath();
 	icons.arc(GRID / 2, 15 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
 	icons.fill();
@@ -403,33 +455,8 @@ function initCanvas () {
 	resize();
 	window.addEventListener('resize', resize);
 
-	canvas.addEventListener('mousemove', function (e) {
-		var action = getAction(e);
-		if (action) {
-			canvas.title = action.title;
-			canvas.style.cursor = 'pointer';
-		} else {
-			canvas.title = '';
-			canvas.style.cursor = '';
-		}
-	});
-	canvas.addEventListener('click', function (e) {
-		var action = getAction(e) || {};
-		switch (action.action) {
-		case 'speed': speedUp(1.3); break;
-		case 'menu': location.reload(); /*initMenu();*/ break; //FIXME
-		case 'togglemute':
-			isMuted = !isMuted;
-			if (isMuted) {
-				storePersistent('muted', 1);
-			} else {
-				clearPersistent('muted');
-			}
-			if (!isRunning) {
-				drawPanel();
-			}
-		}
-	});
+	canvas.addEventListener('mousemove', mousemoveHandler);
+	canvas.addEventListener('click', clickHander);
 }
 
 function resize () {
@@ -552,10 +579,12 @@ function drawHelp () {
 	ctx.moveTo(TOTAL_WIDTH / 2, 3 * TOTAL_HEIGHT / 4);
 	ctx.lineTo(TOTAL_WIDTH / 2 - 15, 3 * TOTAL_HEIGHT / 4);
 	ctx.stroke();
-	drawText('Drag to shoot', 3 * TOTAL_WIDTH / 4 - GRID / 2, 3 * TOTAL_HEIGHT / 4, TOTAL_WIDTH / 2, GRID / 2);
-	drawText('(or use your keyboard:', 3 * TOTAL_WIDTH / 4, 3 * TOTAL_HEIGHT / 4 + GRID / 2, TOTAL_WIDTH / 2, GRID / 2);
-	drawText('left and right cursor', 3 * TOTAL_WIDTH / 4, 3 * TOTAL_HEIGHT / 4 + GRID, TOTAL_WIDTH / 2, GRID / 2);
-	drawText('to aim, Enter to shoot)', 3 * TOTAL_WIDTH / 4, 3 * TOTAL_HEIGHT / 4 + 1.5 * GRID, TOTAL_WIDTH / 2, GRID / 2);
+	ctx.textAlign = 'start';
+	drawText('Drag to shoot', TOTAL_WIDTH / 2 + GRID / 2, 3 * TOTAL_HEIGHT / 4, TOTAL_WIDTH / 2 - GRID / 2, GRID / 2);
+	drawText('(or use your keyboard:', TOTAL_WIDTH / 2 + GRID / 2, 3 * TOTAL_HEIGHT / 4 + GRID / 2, TOTAL_WIDTH / 2 - GRID / 2, GRID / 2);
+	drawText('left and right cursor', TOTAL_WIDTH / 2 + GRID / 2, 3 * TOTAL_HEIGHT / 4 + GRID, TOTAL_WIDTH / 2 - GRID / 2, GRID / 2);
+	drawText('to aim, Enter to shoot)', TOTAL_WIDTH / 2 + GRID / 2, 3 * TOTAL_HEIGHT / 4 + 1.5 * GRID, TOTAL_WIDTH / 2 - GRID / 2, GRID / 2);
+	ctx.textAlign = 'center';
 }
 
 /*
@@ -565,7 +594,7 @@ This part contains all functions for managing rounds, starting and ending them.
 
 //Eject
 function waitEject (ballX, callback, v) {
-	var mouse = false, key = false, startX, startY, keyX, keyY;
+	var mode, startX, startY, keyX, keyY;
 
 	function getSpeedFromDrag(x, y) {
 		var d, f;
@@ -583,24 +612,63 @@ function waitEject (ballX, callback, v) {
 	}
 
 	function mousedownHandler (e) {
+		if (mode === 't') {
+			return;
+		}
 		startX = e.screenX;
 		startY = e.screenY;
-		mouse = true;
-		key = false;
+		mode = 'm';
 		e.preventDefault();
 	}
 
 	function mousemoveHandler (e) {
-		if (!mouse) {
+		if (mode !== 'm') {
 			return;
 		}
-		moveHandler(e);
+		e.preventDefault();
+		moveHandler(e.screenX, e.screenY);
 	}
 
-	function moveHandler (e) {
-		var v, l, t;
+	function mouseupHandler (e) {
+		if (mode !== 'm') {
+			return;
+		}
 		e.preventDefault();
-		v = getSpeedFromDrag(e.screenX - startX, e.screenY - startY);
+		upHandler(e.screenX, e.screenY);
+	}
+
+	function touchstartHandler (e) {
+		if (e.touches.length !== 1) {
+			mode = '';
+			return;
+		}
+		startX = e.touches[0].screenX;
+		startY = e.touches[0].screenY;
+		mode = 't';
+	}
+
+	function touchmoveHandler (e) {
+		if (e.touches.length !== 1) {
+			mode = '';
+			return;
+		}
+		moveHandler(e.touches[0].screenX, e.touches[0].screenY);
+	}
+
+	function touchendHandler (e) {
+		if (mode !== 't' || e.changedTouches.length !== 1) {
+			return;
+		}
+		upHandler(e.changedTouches[0].screenX, e.changedTouches[0].screenY);
+	}
+
+	function touchcancelHandler () {
+		mode = '';
+	}
+
+	function moveHandler (x, y) {
+		var v, l, t;
+		v = getSpeedFromDrag(x - startX, y - startY);
 		draw();
 		drawNumberBalls(ballCount, ballX);
 		if (v) {
@@ -613,22 +681,16 @@ function waitEject (ballX, callback, v) {
 		}
 	}
 
-	function upHandler (e) {
+	function upHandler (x, y) {
 		var v;
-		v = getSpeedFromDrag(e.screenX - startX, e.screenY - startY);
-		e.preventDefault();
+		mode = '';
+		v = getSpeedFromDrag(x - startX, y - startY);
 		draw();
 		if (v) {
-			document.documentElement.style.cursor = '';
-			window.removeEventListener('mousedown', mousedownHandler);
-			window.removeEventListener('mousemove', mousemoveHandler);
-			window.removeEventListener('mouseup', upHandler);
-			document.body.removeEventListener('keydown', keyHandler);
+			disableEject();
 			callback(v.vx, v.vy);
 		} else {
 			drawNumberBalls(ballCount, ballX);
-			mouse = false;
-			key = false;
 		}
 	}
 
@@ -637,10 +699,9 @@ function waitEject (ballX, callback, v) {
 		switch (e.key || e.keyCode) {
 		case 13:
 		case 'Enter':
-			if (key) {
-				e.screenX = keyX;
-				e.screenY = keyY;
-				upHandler(e);
+			if (mode === 'k') {
+				e.preventDefault();
+				upHandler(keyX, keyY);
 			}
 			break;
 		case 37:
@@ -651,20 +712,18 @@ function waitEject (ballX, callback, v) {
 		case 39:
 		case 'Right':
 		case 'ArrowRight':
-			if (!key) {
+			if (mode !== 'k') {
 				startX = TOTAL_WIDTH / 2;
 				startY = 0;
 				keyX = startX;
 				keyY = startY + 10;
-				key = true;
-				mouse = false;
+				mode = 'k';
 			}
 			//You can't precisely aim with the mouse, so you can't with keyboard either
 			keyX -= dir * (2 + Math.floor(2 * Math.random()));
 			keyY += Math.floor(2 * Math.random());
-			e.screenX = keyX;
-			e.screenY = keyY;
-			moveHandler(e);
+			e.preventDefault();
+			moveHandler(keyX, keyY);
 		}
 	}
 
@@ -676,8 +735,24 @@ function waitEject (ballX, callback, v) {
 	document.documentElement.style.cursor = 'crosshair';
 	window.addEventListener('mousedown', mousedownHandler);
 	window.addEventListener('mousemove', mousemoveHandler);
-	window.addEventListener('mouseup', upHandler);
-	document.body.addEventListener('keydown', keyHandler);
+	window.addEventListener('mouseup', mouseupHandler);
+	window.addEventListener('touchstart', touchstartHandler);
+	window.addEventListener('touchmove', touchmoveHandler);
+	window.addEventListener('touchend', touchendHandler);
+	window.addEventListener('touchcancel', touchcancelHandler);
+	window.addEventListener('keydown', keyHandler);
+	disableEject = function () {
+		document.documentElement.style.cursor = '';
+		window.removeEventListener('mousedown', mousedownHandler);
+		window.removeEventListener('mousemove', mousemoveHandler);
+		window.removeEventListener('mouseup', mouseupHandler);
+		window.removeEventListener('touchstart', touchstartHandler);
+		window.removeEventListener('touchmove', touchmoveHandler);
+		window.removeEventListener('touchend', touchendHandler);
+		window.removeEventListener('touchcancel', touchcancelHandler);
+		window.removeEventListener('keydown', keyHandler);
+		disableEject = false;
+	};
 	drawNumberBalls(ballCount, ballX);
 	if (!getPersistent('hint')) {
 		drawHelp();
@@ -919,6 +994,8 @@ This part contains all functions for the game loop.
 
 function speedUp (factor) {
 	playSound('speed');
+	startVx *= factor;
+	startVy *= factor;
 	allBalls.forEach(function (ball) {
 		ball.vx *= factor;
 		ball.vy *= factor;
