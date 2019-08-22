@@ -5,6 +5,8 @@ html {
 }
 body {
 	background: black;
+	color: white;
+	font: 20px sans-serif;
 	padding: 0;
 	margin: 0;
 }
@@ -12,18 +14,14 @@ canvas {
 	display: block;
 	margin: auto;
 }
-#menu{
- color: white;
-}
 button {
- display: block;
- width: 20em;
- margin: auto;
- border-radius: 20px;
- font-size: 20px;
- cursor: pointer;
+	display: block;
+	width: 20em;
+	margin: auto;
+	border-radius: 20px;
+	font-size: 20px;
+	cursor: pointer;
 }
-p:first-of-type {
- padding: 2em;
- font: 20px sans-serif
+p {
+	margin: 2em;
 }

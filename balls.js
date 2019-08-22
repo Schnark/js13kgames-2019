@@ -22,6 +22,7 @@ H. Init
 A. Global variables
 This part contains all global variables.
 */
+//TODO decide on a size, or use a size depending on screen size or whatever, e.g. increase GRID to 60, SMALL_R to GRID * 0.2, LARGE_R to GRID * 0.4
 var GRID = 48, //size of grid unit in pixels
 	SMALL_R = 10, //radius of small balls
 	LARGE_R = GRID * 5 / 12, //typical radius of items (but may vary)
@@ -31,8 +32,8 @@ var GRID = 48, //size of grid unit in pixels
 	INNER_HEIGHT = HEIGHT * GRID - 2 * SMALL_R, //center of small balls can go) in pixels
 	TOTAL_WIDTH = INNER_WIDTH + 2 * SMALL_R, //total width and height of canvas in pixels
 	TOTAL_HEIGHT = INNER_HEIGHT + 2 * SMALL_R + PANEL_HEIGHT,
-	EJECT_SPEED = 0.3, //speed of balls (in pixels/ms)
-	END_SPEED = 0.4, //speed of balls moving to end position
+	EJECT_SPEED = TOTAL_WIDTH / 900, //speed of balls (in pixels/ms)
+	END_SPEED = TOTAL_WIDTH / 600, //speed of balls moving to end position
 	EJECT_TIME = GRID / EJECT_SPEED, //time between balls at start (in ms)
 	KEY_PREFIX = 'schnark-back-', //prefix to keys when storing data (to avoid collision with other games)
 	BACKGROUND_COLORS = ['hsl(250,10%,10%)', 'hsl(250,30%,20%)', 'hsl(30,30%,20%)'], //colors for background
@@ -191,12 +192,34 @@ function playGame (type) {
 	}, type);
 }
 
+function showIntro (callback, force) {
+	var button, introTxt = '(Note: Just skip the intro for now and start playing, it isn’t ready yet.)\nEver since you read <i>The War of the Worlds</i>, a documentary on the first invasion from Mars, you feared—like the author—that one day the Martians might come back.\nEven though your friends laughed a great deal about it, you decided to built a bullet from the remains of their artillery. It’s just one bullet, which will hardly be enough, but you hope that when the Martians do come back, you can collect material for more bullets before they are able to land.\nAnd then it happens: One night you are awakened by a bright light, and you see Martian spaceships decending. Now it is your chance to prove to your friends that you were right. But it’s more than that: The fate of all human beeings might depend on whether you succeed to destroy the Martian spaceships before they can land.\nGood luck!';
+
+	function clickHander () {
+		storePersistent('intro', 1);
+		button.removeEventListener('click', clickHander);
+		callback();
+	}
+
+	if (!force && getPersistent('intro')) {
+		callback();
+		return;
+	}
+	document.body.innerHTML = '<p>' + introTxt.replace(/\n/g, '</p><p>') + '</p><p><button id="start">Start</button></p>';
+	button = document.getElementById('start');
+	button.addEventListener('click', clickHander);
+}
+
 function initMenu () {
 	function clickHander (e) {
 		var type = e.target.dataset.type;
 		if (type) {
 			menu.removeEventListener('click', clickHander);
-			playGame(type);
+			if (type === 'intro') {
+				showIntro(initMenu, true);
+			} else {
+				playGame(type);
+			}
 		}
 	}
 
@@ -218,7 +241,8 @@ function initMenu () {
 			'</button></p>';
 	});
 
-	html.unshift('<p>Some aliens that tried to invade earth in the past are back. Prevent them from landing there spaceships as long as possible. Collect stars to unlock new levels. Total stars so far: ' + starCount + '</p>');
+	html.unshift('<p>Total stars so far: ' + starCount + '</p>');
+	html.push('<p><button data-type="intro">Show intro again</button></p>');
 	document.body.innerHTML = '<div id="menu">' + html.join('') + '</div>';
 	menu = document.getElementById('menu');
 	menu.addEventListener('click', clickHander);
@@ -405,19 +429,19 @@ function initCanvas () {
 	icons.fillStyle = 'rgb(255,255,100)';
 	icons.fillText('★', GRID / 2, 3 * GRID / 2, GRID);
 
-	icons.fillStyle = 'rgba(255,200,2000,0.1)';
+	icons.fillStyle = 'rgba(255,200,200,0.1)';
 	icons.beginPath();
 	icons.arc(GRID / 2, 5 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
 	icons.fill();
 	icons.fillStyle = 'rgb(255,100,100)';
 	icons.fillText('←', GRID / 2, 5 * GRID / 2, GRID);
 
-	icons.fillStyle = 'rgba(255,200,255,0.1)';
+	icons.fillStyle = 'rgba(255,255,200,0.1)';
 	icons.beginPath();
 	icons.arc(GRID / 2, 7 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
 	icons.fill();
-	icons.fillStyle = 'rgb(255,255,255)';
-	icons.fillText('☠', GRID / 2, 7 * GRID / 2, GRID);
+	icons.fillStyle = 'rgb(255,255,100)';
+	icons.fillText('⚡', GRID / 2, 7 * GRID / 2, GRID);
 
 	icons.fillStyle = 'rgba(255,200,255,0.1)';
 	icons.beginPath();
@@ -447,7 +471,7 @@ function initCanvas () {
 
 	icons.fillStyle = 'white';
 	icons.fillText('X', GRID / 2, 17 * GRID / 2, GRID);
-	icons.fillText('S', GRID / 2, 19 * GRID / 2, GRID);
+	icons.fillText('»', GRID / 2, 19 * GRID / 2, GRID);
 	icons.fillText('M', GRID / 2, 21 * GRID / 2, GRID);
 	icons.fillText('S', GRID / 2, 23 * GRID / 2, GRID);
 	icons = icons.canvas;
@@ -505,28 +529,6 @@ function drawPanel () {
 function draw () {
 	ctx.fillStyle = backgroundGradient;
 	ctx.fillRect(0, PANEL_HEIGHT, TOTAL_WIDTH, TOTAL_HEIGHT - PANEL_HEIGHT);
-	animations.forEach(function (animation) {
-		var state = (animation.dur - animation.t) / animation.dur;
-		switch (animation.type) {
-		case 'remove-item':
-			ctx.fillStyle = 'hsla(' + START_COLOR + ',' + (100 * state) + '%,50%,' + state + ')';
-			ctx.beginPath();
-			ctx.arc(SMALL_R + animation.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - animation.y, animation.r * state, 0, 2 * Math.PI);
-			ctx.fill();
-			break;
-		case 'die':
-			ctx.fillStyle = 'rgba(10,10,10,0.3)';
-			ctx.beginPath();
-			ctx.arc(SMALL_R + animation.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - animation.y, animation.r * state, 0, 2 * Math.PI);
-			ctx.fill();
-			break;
-		case 'explode':
-			ctx.fillStyle = 'rgba(255,255,255,' + state + ')';
-			ctx.beginPath();
-			ctx.arc(SMALL_R + animation.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - animation.y, animation.r - animation.r * state, 0, 2 * Math.PI);
-			ctx.fill();
-		}
-	});
 	allItems.forEach(function (item) {
 		var colors;
 		if (item.n > 0) {
@@ -539,6 +541,38 @@ function draw () {
 			drawText(item.n, SMALL_R + item.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - item.y, 2 * item.r, 2 * item.r);
 		} else if (item.n < 0) {
 			drawIcon(-item.n - 1, SMALL_R + item.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - item.y, GRID * item.r / LARGE_R);
+		}
+	});
+	animations.forEach(function (animation) {
+		var state = (animation.dur - animation.t) / animation.dur, m;
+		switch (animation.type) {
+		case 'remove-item':
+			ctx.fillStyle = 'hsla(' + START_COLOR + ',' + (100 * state) + '%,50%,' + state + ')';
+			ctx.beginPath();
+			ctx.arc(SMALL_R + animation.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - animation.y, animation.r * state, 0, 2 * Math.PI);
+			ctx.fill();
+			break;
+		case 'die':
+			//TODO improve or decide to use as is
+			m = state < 2 / 3 ? 3 * state / 2 : 3 * (1 - state);
+			ctx.fillStyle = 'hsla(60,100%,' + (50 + 50 * m) + '%,' + m + ')';
+			ctx.beginPath();
+			ctx.arc(SMALL_R + animation.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - animation.y, animation.r - animation.r * state, 0, 2 * Math.PI);
+			ctx.fill();
+			break;
+		case 'explode':
+			ctx.fillStyle = 'rgba(255,255,255,' + state + ')';
+			ctx.beginPath();
+			ctx.arc(SMALL_R + animation.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - animation.y, animation.r - animation.r * state, 0, 2 * Math.PI);
+			ctx.fill();
+			break;
+		case 'hit':
+			//TODO improve or delete or decide to use as is
+			ctx.fillStyle = 'rgba(255,255,255,' + (state / 2) + ')';
+			ctx.beginPath();
+			ctx.arc(SMALL_R + animation.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - animation.y, animation.r * state, 0, 2 * Math.PI);
+			ctx.fill();
+			break;
 		}
 	});
 	ctx.fillStyle = BALL_COLOR;
@@ -573,17 +607,17 @@ function drawLost (texts) {
 function drawHelp () {
 	ctx.fillStyle = BALL_COLOR;
 	ctx.beginPath();
-	ctx.moveTo(TOTAL_WIDTH / 3, 2 * TOTAL_HEIGHT / 3);
-	ctx.lineTo(TOTAL_WIDTH / 2, 3 * TOTAL_HEIGHT / 4);
-	ctx.lineTo(TOTAL_WIDTH / 2, 3 * TOTAL_HEIGHT / 4 - 15);
-	ctx.moveTo(TOTAL_WIDTH / 2, 3 * TOTAL_HEIGHT / 4);
-	ctx.lineTo(TOTAL_WIDTH / 2 - 15, 3 * TOTAL_HEIGHT / 4);
+	ctx.moveTo(TOTAL_WIDTH / 3 - GRID, 2 * TOTAL_HEIGHT / 3);
+	ctx.lineTo(TOTAL_WIDTH / 2 - GRID, 3 * TOTAL_HEIGHT / 4);
+	ctx.lineTo(TOTAL_WIDTH / 2 - GRID, 3 * TOTAL_HEIGHT / 4 - 15);
+	ctx.moveTo(TOTAL_WIDTH / 2 - GRID, 3 * TOTAL_HEIGHT / 4);
+	ctx.lineTo(TOTAL_WIDTH / 2 - 15 - GRID, 3 * TOTAL_HEIGHT / 4);
 	ctx.stroke();
 	ctx.textAlign = 'start';
-	drawText('Drag to shoot', TOTAL_WIDTH / 2 + GRID / 2, 3 * TOTAL_HEIGHT / 4, TOTAL_WIDTH / 2 - GRID / 2, GRID / 2);
-	drawText('(or use your keyboard:', TOTAL_WIDTH / 2 + GRID / 2, 3 * TOTAL_HEIGHT / 4 + GRID / 2, TOTAL_WIDTH / 2 - GRID / 2, GRID / 2);
-	drawText('left and right cursor', TOTAL_WIDTH / 2 + GRID / 2, 3 * TOTAL_HEIGHT / 4 + GRID, TOTAL_WIDTH / 2 - GRID / 2, GRID / 2);
-	drawText('to aim, Enter to shoot)', TOTAL_WIDTH / 2 + GRID / 2, 3 * TOTAL_HEIGHT / 4 + 1.5 * GRID, TOTAL_WIDTH / 2 - GRID / 2, GRID / 2);
+	drawText('Drag to shoot', TOTAL_WIDTH / 2, 3 * TOTAL_HEIGHT / 4, TOTAL_WIDTH / 2, GRID / 2);
+	drawText('(or use your keyboard:', TOTAL_WIDTH / 2, 3 * TOTAL_HEIGHT / 4 + GRID / 2, TOTAL_WIDTH / 2, GRID / 2);
+	drawText('left and right cursor', TOTAL_WIDTH / 2, 3 * TOTAL_HEIGHT / 4 + GRID, TOTAL_WIDTH / 2, GRID / 2);
+	drawText('to aim, Enter to shoot)', TOTAL_WIDTH / 2, 3 * TOTAL_HEIGHT / 4 + 1.5 * GRID, TOTAL_WIDTH / 2, GRID / 2);
 	ctx.textAlign = 'center';
 }
 
@@ -918,7 +952,7 @@ function exitRound () {
 	//move all items down one row
 	allItems.forEach(function (item) {
 		item.y -= GRID;
-		if (item.y < GRID / 2 + SMALL_R + item.r) {
+		if (item.y < GRID - SMALL_R + item.r) {
 			if (item.n <= 0) {
 				item.n = 0;
 			} else {
@@ -1162,6 +1196,15 @@ function doStep (t) {
 					});
 				} else {
 					playSound('item');
+					r = 2 * item.r / (3 * (item.r + SMALL_R));
+					animations.push({
+						x: (1 - r) * item.x + r * (ball.x + (ball.noWall && item.x > INNER_WIDTH / 2 ? TOTAL_WIDTH : 0)),
+						y: (1 - r) * item.y + r * ball.y,
+						r: item.r / 3,
+						type: 'hit',
+						t: 0,
+						dur: 500
+					});
 				}
 			} else if (allItems[ball.action].n < 0) {
 				switch (-item.n) {
@@ -1200,10 +1243,10 @@ function doStep (t) {
 					animations.push({
 						x: item.x,
 						y: item.y,
-						r: item.r,
+						r: 2 * item.r,
 						type: 'die',
 						t: 0,
-						dur: 500
+						dur: 400
 					});
 					return;
 				case 5: //random
@@ -1300,6 +1343,6 @@ H. Init
 This part really iniatilizes everything and get's the game started.
 */
 initVars();
-initMenu();
+showIntro(initMenu);
 
 })();
