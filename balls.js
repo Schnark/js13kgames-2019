@@ -22,18 +22,17 @@ H. Init
 A. Global variables
 This part contains all global variables.
 */
-//TODO decide on a size, or use a size depending on screen size or whatever, e.g. increase GRID to 60, SMALL_R to GRID * 0.2, LARGE_R to GRID * 0.4
-var GRID = 48, //size of grid unit in pixels
-	SMALL_R = 10, //radius of small balls
-	LARGE_R = GRID * 5 / 12, //typical radius of items (but may vary)
+var GRID = 60, //size of grid unit in pixels (TODO or use something 48/72-based? Then also SMALL_R = GRID * 5 / 24)
+	SMALL_R = GRID * 0.2, //radius of small balls
+	LARGE_R = 2 * SMALL_R, //typical radius of items (but may vary)
 	PANEL_HEIGHT = GRID, //height of panel in pixels
 	WIDTH = 7, HEIGHT = 10, //width and height of total area in GRID units
 	INNER_WIDTH = WIDTH * GRID - 2 * SMALL_R, //width and height of inner area (i.e. where
 	INNER_HEIGHT = HEIGHT * GRID - 2 * SMALL_R, //center of small balls can go) in pixels
 	TOTAL_WIDTH = INNER_WIDTH + 2 * SMALL_R, //total width and height of canvas in pixels
 	TOTAL_HEIGHT = INNER_HEIGHT + 2 * SMALL_R + PANEL_HEIGHT,
-	EJECT_SPEED = TOTAL_WIDTH / 900, //speed of balls (in pixels/ms)
-	END_SPEED = TOTAL_WIDTH / 600, //speed of balls moving to end position
+	EJECT_SPEED = TOTAL_WIDTH / 800, //speed of balls (in pixels/ms)
+	END_SPEED = TOTAL_WIDTH / 500, //speed of balls moving to end position
 	EJECT_TIME = GRID / EJECT_SPEED, //time between balls at start (in ms)
 	KEY_PREFIX = 'schnark-back-', //prefix to keys when storing data (to avoid collision with other games)
 	BACKGROUND_COLORS = ['hsl(250,10%,10%)', 'hsl(250,30%,20%)', 'hsl(30,30%,20%)'], //colors for background
@@ -74,7 +73,7 @@ type: type of animation
 	startVx, startVy, //speed of balls at start
 	endX, //end position of balls
 	ballCount, livingBallCount, roundNumber, starCount, noWalls, isRunning, isMuted,
-	ctx, backgroundGradient, icons, audio, disableEject,
+	ctx, backgroundGradient, icons, audio, disableEject, menuShownFirstTime = true,
 	rAF = window.requestAnimationFrame || window.mozRequestAnimationFrame;
 
 /*
@@ -158,6 +157,40 @@ function getCollisionSpeed (x, y, vx, vy) {
 	};
 }
 
+function isFullscreen () {
+	return document.fullscreenElement ||
+		document.mozFullScreenElement ||
+		document.webketFullscreenElement ||
+		document.msFullscreenElement ||
+		document.webkitIsFullScreen;
+}
+
+function toggleFullscreen () {
+	var el;
+	if (isFullscreen()) {
+		if (document.exitFullscreen) {
+			document.exitFullscreen();
+		} else if (document.webkitExitFullscreen) {
+			document.webkitExitFullscreen();
+		} else if (document.mozCancelFullScreen) {
+			document.mozCancelFullScreen();
+		} else if (document.msExitFullscreen) {
+			document.msExitFullscreen();
+		}
+	} else {
+		el = document.documentElement;
+		if (el.requestFullscreen) {
+			el.requestFullscreen();
+		} else if (el.webkitRequestFullscreen) {
+			el.webkitRequestFullscreen();
+		} else if (el.mozRequestFullScreen) {
+			el.mozRequestFullScreen();
+		} else if (el.msRequestFullscreen) {
+			el.msRequestFullscreen();
+		}
+	}
+}
+
 /*
 C. Initialising
 This part contains the code to iniatilize the game, i.e. that part of the game
@@ -174,22 +207,23 @@ function getRecords () {
 
 function playGame (type) {
 	initSound();
-	initCanvas();
-	play(function () {
-		var msg = ['Game over.'], records = getRecords();
-		if (roundNumber > (records[gameType] || 0)) {
-			records[gameType] = roundNumber;
-			storePersistent('records', JSON.stringify(records));
-			msg.push('New record!');
-		}
-		if (document.monetization && document.monetization.state === 'started') {
-			starCount += 5;
-			storePersistent('stars', starCount);
-			msg.push('', 'As a Web Monetization', 'supporter, you get', '5 extra stars!');
-		}
-		drawLost(msg);
-		playSound('end');
-	}, type);
+	initCanvas(function () {
+		play(function () {
+			var msg = ['Game over.'], records = getRecords();
+			if (roundNumber > (records[gameType] || 0)) {
+				records[gameType] = roundNumber;
+				storePersistent('records', JSON.stringify(records));
+				msg.push('New record!');
+			}
+			if (document.monetization && document.monetization.state === 'started') {
+				starCount += 5;
+				storePersistent('stars', starCount);
+				msg.push('', 'As a Web Monetization', 'supporter, you get', '5 extra stars!');
+			}
+			drawLost(msg);
+			playSound('end');
+		}, type);
+	});
 }
 
 function showIntro (callback, force) {
@@ -213,7 +247,9 @@ function showIntro (callback, force) {
 function initMenu () {
 	function clickHander (e) {
 		var type = e.target.dataset.type;
-		if (type) {
+		if (type === 'fullscreen') {
+			toggleFullscreen();
+		} else if (type) {
 			menu.removeEventListener('click', clickHander);
 			if (type === 'intro') {
 				showIntro(initMenu, true);
@@ -232,7 +268,7 @@ function initMenu () {
 		{type: 'chaos-special', label: 'Special Chaos', stars: 50}
 	], html, menu, records = getRecords();
 	if (getPersistent('state')) {
-		levels.unshift({type: 'restore', label: 'Resume last game'});
+		levels.unshift({type: 'restore', label: menuShownFirstTime ? 'Resume last game' : 'Continue current game'});
 	}
 	html = levels.map(function (level) {
 		var enabled = (level.stars || 0) <= starCount;
@@ -243,9 +279,11 @@ function initMenu () {
 
 	html.unshift('<p>Total stars so far: ' + starCount + '</p>');
 	html.push('<p><button data-type="intro">Show intro again</button></p>');
+	html.push('<p><button data-type="fullscreen">Toggle fullscreen</button></p>');
 	document.body.innerHTML = '<div id="menu">' + html.join('') + '</div>';
 	menu = document.getElementById('menu');
 	menu.addEventListener('click', clickHander);
+	menuShownFirstTime = false;
 }
 
 /*
@@ -320,8 +358,18 @@ function playSound (type) {
 E. Drawing
 This part contains all functions related to canvas and drawing.
 */
+function loadImage (url, w, h, callback) {
+	var img = new Image(w, h), canvas = document.createElement('canvas');
+	canvas.width = w;
+	canvas.height = h;
+	img.onload = function () {
+		canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+		callback(canvas);
+	};
+	img.src = url;
+}
 
-function initCanvas () {
+function initCanvas (callback) {
 	var canvas;
 
 	function getAction (e) {
@@ -406,86 +454,95 @@ function initCanvas () {
 	backgroundGradient.addColorStop(1 - (GRID - 1) / (TOTAL_HEIGHT - PANEL_HEIGHT), BACKGROUND_COLORS[2]);
 	backgroundGradient.addColorStop(1, BACKGROUND_COLORS[2]);
 
-	icons = document.createElement('canvas');
-	icons.width = GRID;
-	icons.height = 12 * GRID;
-	icons = icons.getContext('2d');
-	//TODO load from image
-	icons.font = 'bold ' + (GRID / 2) + 'px sans-serif';
-	icons.textAlign = 'center';
-	icons.textBaseline = 'middle';
-
-	icons.fillStyle = 'rgba(200,255,200,0.1)';
-	icons.beginPath();
-	icons.arc(GRID / 2, GRID / 2, LARGE_R, 0, 2 * Math.PI);
-	icons.fill();
-	icons.fillStyle = 'rgb(100,255,100)';
-	icons.fillText('+', GRID / 2, GRID / 2, GRID);
-
-	icons.fillStyle = 'rgba(255,255,200,0.1)';
-	icons.beginPath();
-	icons.arc(GRID / 2, 3 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
-	icons.fill();
-	icons.fillStyle = 'rgb(255,255,100)';
-	icons.fillText('★', GRID / 2, 3 * GRID / 2, GRID);
-
-	icons.fillStyle = 'rgba(255,200,200,0.1)';
-	icons.beginPath();
-	icons.arc(GRID / 2, 5 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
-	icons.fill();
-	icons.fillStyle = 'rgb(255,100,100)';
-	icons.fillText('←', GRID / 2, 5 * GRID / 2, GRID);
-
-	icons.fillStyle = 'rgba(255,255,200,0.1)';
-	icons.beginPath();
-	icons.arc(GRID / 2, 7 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
-	icons.fill();
-	icons.fillStyle = 'rgb(255,255,100)';
-	icons.fillText('⚡', GRID / 2, 7 * GRID / 2, GRID);
-
-	icons.fillStyle = 'rgba(255,200,255,0.1)';
-	icons.beginPath();
-	icons.arc(GRID / 2, 9 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
-	icons.fill();
-	icons.fillStyle = 'rgb(255,100,255)';
-	icons.fillText('?', GRID / 2, 9 * GRID / 2, GRID);
-
-	icons.fillStyle = 'rgba(200,200,255,0.1)';
-	icons.beginPath();
-	icons.arc(GRID / 2, 11 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
-	icons.fill();
-	icons.fillStyle = 'rgb(100,100,255)';
-	icons.fillText('↔', GRID / 2, 11 * GRID / 2, GRID);
-
-	icons.fillStyle = 'rgba(255,200,80,0.1)';
-	icons.beginPath();
-	icons.arc(GRID / 2, 13 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
-	icons.fill();
-	icons.fillStyle = 'rgb(255,165,100)';
-	icons.fillText('💣', GRID / 2, 13 * GRID / 2, GRID);
-
-	icons.fillStyle = 'rgb(80,80,80)';
-	icons.beginPath();
-	icons.arc(GRID / 2, 15 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
-	icons.fill();
-
-	icons.fillStyle = 'white';
-	icons.fillText('X', GRID / 2, 17 * GRID / 2, GRID);
-	icons.fillText('»', GRID / 2, 19 * GRID / 2, GRID);
-	icons.fillText('M', GRID / 2, 21 * GRID / 2, GRID);
-	icons.fillText('S', GRID / 2, 23 * GRID / 2, GRID);
-	icons = icons.canvas;
-
 	resize();
 	window.addEventListener('resize', resize);
 
 	canvas.addEventListener('mousemove', mousemoveHandler);
 	canvas.addEventListener('click', clickHander);
+
+	if (icons) {
+		callback();
+		return;
+	}
+
+	loadImage('icons.svg', GRID, 12 * GRID, function (canvas) {
+		icons = canvas;
+
+		//TODO move all icons to SVG and properly size them
+		icons = icons.getContext('2d');
+
+		icons.font = 'bold ' + (GRID / 2) + 'px sans-serif';
+		icons.textAlign = 'center';
+		icons.textBaseline = 'middle';
+
+		//icons.fillStyle = 'rgba(200,255,200,0.1)';
+		//icons.beginPath();
+		//icons.arc(GRID / 2, GRID / 2, LARGE_R, 0, 2 * Math.PI);
+		//icons.fill();
+		//icons.fillStyle = 'rgb(100,255,100)';
+		//icons.fillText('+', GRID / 2, GRID / 2, GRID);
+
+		//icons.fillStyle = 'rgba(255,255,200,0.1)';
+		//icons.beginPath();
+		//icons.arc(GRID / 2, 3 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
+		//icons.fill();
+		//icons.fillStyle = 'rgb(255,255,100)';
+		//icons.fillText('★', GRID / 2, 3 * GRID / 2, GRID);
+
+		//icons.fillStyle = 'rgba(255,200,200,0.1)';
+		//icons.beginPath();
+		//icons.arc(GRID / 2, 5 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
+		//icons.fill();
+		//icons.fillStyle = 'rgb(255,100,100)';
+		//icons.fillText('←', GRID / 2, 5 * GRID / 2, GRID);
+
+		//icons.fillStyle = 'rgba(255,255,200,0.1)';
+		//icons.beginPath();
+		//icons.arc(GRID / 2, 7 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
+		//icons.fill();
+		//icons.fillStyle = 'rgb(255,255,100)';
+		//icons.fillText('⚡', GRID / 2, 7 * GRID / 2, GRID);
+
+		//icons.fillStyle = 'rgba(255,200,255,0.1)';
+		//icons.beginPath();
+		//icons.arc(GRID / 2, 9 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
+		//icons.fill();
+		//icons.fillStyle = 'rgb(255,100,255)';
+		//icons.fillText('?', GRID / 2, 9 * GRID / 2, GRID);
+
+		//icons.fillStyle = 'rgba(200,200,255,0.1)';
+		//icons.beginPath();
+		//icons.arc(GRID / 2, 11 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
+		//icons.fill();
+		//icons.fillStyle = 'rgb(100,100,255)';
+		//icons.fillText('↔', GRID / 2, 11 * GRID / 2, GRID);
+
+		//icons.fillStyle = 'rgba(255,200,80,0.1)';
+		//icons.beginPath();
+		//icons.arc(GRID / 2, 13 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
+		//icons.fill();
+		icons.fillStyle = 'rgb(255,165,100)';
+		icons.fillText('💣', GRID / 2, 13 * GRID / 2, GRID);
+
+		//icons.fillStyle = 'rgb(80,80,80)';
+		//icons.beginPath();
+		//icons.arc(GRID / 2, 15 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
+		//icons.fill();
+
+		//icons.fillStyle = 'white';
+		//icons.fillText('X', GRID / 2, 17 * GRID / 2, GRID);
+		//icons.fillText('»', GRID / 2, 19 * GRID / 2, GRID);
+		//icons.fillText('M', GRID / 2, 21 * GRID / 2, GRID);
+		//icons.fillText('S', GRID / 2, 23 * GRID / 2, GRID);
+		icons = icons.canvas;
+
+		callback();
+	});
 }
 
 function resize () {
 	var docEl = document.documentElement, scale, style;
-	scale = Math.min(1, docEl.clientWidth / TOTAL_WIDTH, docEl.clientHeight / TOTAL_HEIGHT);
+	scale = Math.min(isFullscreen() ? 2 : 1, docEl.clientWidth / TOTAL_WIDTH, docEl.clientHeight / TOTAL_HEIGHT);
 	style = ctx.canvas.style;
 	style.width = TOTAL_WIDTH * scale + 'px';
 	style.height = TOTAL_HEIGHT * scale + 'px';
@@ -567,7 +624,6 @@ function draw () {
 			ctx.fill();
 			break;
 		case 'hit':
-			//TODO improve or delete or decide to use as is
 			ctx.fillStyle = 'rgba(255,255,255,' + (state / 2) + ')';
 			ctx.beginPath();
 			ctx.arc(SMALL_R + animation.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - animation.y, animation.r * state, 0, 2 * Math.PI);
@@ -1243,10 +1299,10 @@ function doStep (t) {
 					animations.push({
 						x: item.x,
 						y: item.y,
-						r: 2 * item.r,
+						r: 3 * item.r,
 						type: 'die',
 						t: 0,
-						dur: 400
+						dur: 300
 					});
 					return;
 				case 5: //random
