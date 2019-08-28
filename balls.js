@@ -72,8 +72,18 @@ type: type of animation
 */
 	startVx, startVy, //speed of balls at start
 	endX, //end position of balls
-	ballCount, livingBallCount, roundNumber, starCount, noWalls, isRunning, isMuted,
-	ctx, backgroundGradient, icons, audio, disableEject, menuShownFirstTime = true,
+	ballCount, //number of all balls
+	livingBallCount, //number of balls still alive (during play)
+	roundNumber, //current round number
+	starCount, //stars collected so far
+	noWalls, //pass through walls
+	isRunning, //game is running
+	isMuted, //sound off
+	ctx, //context of canvas
+	backgroundGradient, icons, //background gradient, icon sprites
+	audio, //audio context
+	disableEject, //function to remove all events related to ejecting
+	menuShownFirstTime = true, //menu is shown for the first time in this session
 	rAF = window.requestAnimationFrame || window.mozRequestAnimationFrame;
 
 /*
@@ -157,6 +167,7 @@ function getCollisionSpeed (x, y, vx, vy) {
 	};
 }
 
+//utility functions to manage fullscreen
 function isFullscreen () {
 	return document.fullscreenElement ||
 		document.mozFullScreenElement ||
@@ -301,6 +312,7 @@ function initSound () {
 }
 
 //based on https://github.com/foumart/JS.13kGames/blob/master/lib/SoundFX.js
+//http://www.foumartgames.com/dev/js13kGames/js_libraries/SoundFXGenerator/
 function generateSound (freq, incr, delay, times, vol, type) {
 	var i = 0, osc, g, interval;
 
@@ -336,21 +348,43 @@ function playSound (type) {
 	if (isMuted || !audio) {
 		return;
 	}
-	//FIXME
 	switch (type) {
+	case 'start':
+		generateSound(200, -30, 5, 10, 0.5, 2);
+		break;
+	case 'wall':
+	case 'obstacle':
+		generateSound(100, -30, 15, 10, 0.5, 2);
+		break;
 	case 'item':
+		generateSound(100, -10, 15, 15, 1, 2);
+		break;
 	case 'item-0':
-	case 'ball':
-	case 'star':
-	case 'back':
 	case 'die':
 	case 'explode':
-	case 'speed':
-	case 'wall':
-	case 'end':
+		generateSound(100, -10, 10, 25, 0.5);
+		generateSound(125, -5, 20, 45, 0.1, 1);
+		generateSound(40, 2, 20, 20, 1, 2);
+		generateSound(200, -4, 10, 100, 0.25, 2);
 		break;
-	default: //shouldn't happen
-		generateSound(100, -10, 15, 15, 0.7, 2);
+	case 'ball':
+		generateSound(150, 30, 15, 20, 0.5, 2);
+		break;
+	case 'star':
+		generateSound(510, 0, 15, 20, 0.1);
+		setTimeout(function () {
+			generateSound(2600, 1, 10, 50, 0.2);
+		}, 80);
+		break;
+	case 'end':
+		generateSound(800, -40, 25, 20, 0.5, 2);
+		break;
+	//TODO
+	case 'back':
+	case 'speed':
+		break;
+	default: //shouldn't happen TODO remove
+		console.warn('sound');
 	}
 }
 
@@ -382,7 +416,7 @@ function initCanvas (callback) {
 					title: 'Speed up',
 					action: 'speed'
 				} : {
-					title: 'Menu',
+					title: 'Back to menu',
 					action: 'menu'
 				};
 			} else if (x > TOTAL_WIDTH - PANEL_HEIGHT) {
@@ -393,6 +427,34 @@ function initCanvas (callback) {
 					title: 'Mute',
 					action: 'togglemute'
 				};
+			}
+		}
+	}
+
+	function handleEvent (action) {
+		switch (action) {
+		case 'speed':
+			speedUp(1.7);
+			break;
+		case 'menu':
+			if (disableEject) {
+				disableEject();
+			}
+			window.removeEventListener('resize', resize);
+			canvas.removeEventListener('mousemove', mousemoveHandler);
+			canvas.removeEventListener('click', clickHander);
+			window.removeEventListener('keydown', keyDownHandler);
+			initMenu();
+			break;
+		case 'togglemute':
+			isMuted = !isMuted;
+			if (isMuted) {
+				storePersistent('muted', 1);
+			} else {
+				clearPersistent('muted');
+			}
+			if (!isRunning) {
+				drawPanel();
 			}
 		}
 	}
@@ -410,27 +472,27 @@ function initCanvas (callback) {
 
 	function clickHander (e) {
 		var action = getAction(e) || {};
-		switch (action.action) {
-		case 'speed': speedUp(1.5); break;
-		case 'menu':
-			if (disableEject) {
-				disableEject();
-			}
-			window.removeEventListener('resize', resize);
-			canvas.removeEventListener('mousemove', mousemoveHandler);
-			canvas.removeEventListener('click', clickHander);
-			initMenu();
-			break;
-		case 'togglemute':
-			isMuted = !isMuted;
-			if (isMuted) {
-				storePersistent('muted', 1);
-			} else {
-				clearPersistent('muted');
-			}
+		handleEvent(action.action);
+	}
+
+	function keyDownHandler (e) {
+		switch (e.key || e.keyCode) {
+		case 27:
+		case 'Escape':
 			if (!isRunning) {
-				drawPanel();
+				handleEvent('menu');
 			}
+			break;
+		case 32:
+		case ' ':
+			if (isRunning) {
+				handleEvent('speed');
+			}
+			break;
+		case 83:
+		case 's':
+			handleEvent('togglemute');
+			e.preventDefault();
 		}
 	}
 
@@ -459,6 +521,7 @@ function initCanvas (callback) {
 
 	canvas.addEventListener('mousemove', mousemoveHandler);
 	canvas.addEventListener('click', clickHander);
+	window.addEventListener('keydown', keyDownHandler);
 
 	if (icons) {
 		callback();
@@ -467,75 +530,6 @@ function initCanvas (callback) {
 
 	loadImage('icons.svg', GRID, 12 * GRID, function (canvas) {
 		icons = canvas;
-
-		//TODO move all icons to SVG and properly size them
-		icons = icons.getContext('2d');
-
-		icons.font = 'bold ' + (GRID / 2) + 'px sans-serif';
-		icons.textAlign = 'center';
-		icons.textBaseline = 'middle';
-
-		//icons.fillStyle = 'rgba(200,255,200,0.1)';
-		//icons.beginPath();
-		//icons.arc(GRID / 2, GRID / 2, LARGE_R, 0, 2 * Math.PI);
-		//icons.fill();
-		//icons.fillStyle = 'rgb(100,255,100)';
-		//icons.fillText('+', GRID / 2, GRID / 2, GRID);
-
-		//icons.fillStyle = 'rgba(255,255,200,0.1)';
-		//icons.beginPath();
-		//icons.arc(GRID / 2, 3 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
-		//icons.fill();
-		//icons.fillStyle = 'rgb(255,255,100)';
-		//icons.fillText('★', GRID / 2, 3 * GRID / 2, GRID);
-
-		//icons.fillStyle = 'rgba(255,200,200,0.1)';
-		//icons.beginPath();
-		//icons.arc(GRID / 2, 5 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
-		//icons.fill();
-		//icons.fillStyle = 'rgb(255,100,100)';
-		//icons.fillText('←', GRID / 2, 5 * GRID / 2, GRID);
-
-		//icons.fillStyle = 'rgba(255,255,200,0.1)';
-		//icons.beginPath();
-		//icons.arc(GRID / 2, 7 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
-		//icons.fill();
-		//icons.fillStyle = 'rgb(255,255,100)';
-		//icons.fillText('⚡', GRID / 2, 7 * GRID / 2, GRID);
-
-		//icons.fillStyle = 'rgba(255,200,255,0.1)';
-		//icons.beginPath();
-		//icons.arc(GRID / 2, 9 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
-		//icons.fill();
-		//icons.fillStyle = 'rgb(255,100,255)';
-		//icons.fillText('?', GRID / 2, 9 * GRID / 2, GRID);
-
-		//icons.fillStyle = 'rgba(200,200,255,0.1)';
-		//icons.beginPath();
-		//icons.arc(GRID / 2, 11 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
-		//icons.fill();
-		//icons.fillStyle = 'rgb(100,100,255)';
-		//icons.fillText('↔', GRID / 2, 11 * GRID / 2, GRID);
-
-		//icons.fillStyle = 'rgba(255,200,80,0.1)';
-		//icons.beginPath();
-		//icons.arc(GRID / 2, 13 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
-		//icons.fill();
-		icons.fillStyle = 'rgb(255,165,100)';
-		icons.fillText('💣', GRID / 2, 13 * GRID / 2, GRID);
-
-		//icons.fillStyle = 'rgb(80,80,80)';
-		//icons.beginPath();
-		//icons.arc(GRID / 2, 15 * GRID / 2, LARGE_R, 0, 2 * Math.PI);
-		//icons.fill();
-
-		//icons.fillStyle = 'white';
-		//icons.fillText('X', GRID / 2, 17 * GRID / 2, GRID);
-		//icons.fillText('»', GRID / 2, 19 * GRID / 2, GRID);
-		//icons.fillText('M', GRID / 2, 21 * GRID / 2, GRID);
-		//icons.fillText('S', GRID / 2, 23 * GRID / 2, GRID);
-		icons = icons.canvas;
-
 		callback();
 	});
 }
@@ -1060,6 +1054,7 @@ function play (callback, type) {
 		if (running) {
 			doRound(ballCount, startX, nextRound);
 		} else {
+			animations = [];
 			allBalls = [];
 			draw();
 			storeState(null);
@@ -1170,6 +1165,7 @@ function doStep (t) {
 		case 'start':
 			ball.vx = startVx;
 			ball.vy = startVy;
+			playSound('start');
 			break;
 		case 'end':
 			ball.x = endX; //fix rounding errors
@@ -1341,6 +1337,7 @@ function doStep (t) {
 					collision = getNextCollision(ball.x, ball.y, ball.vx, ball.vy, ball.noWall);
 					ball.t = collision.t;
 					ball.action = collision.action;
+					playSound('obstacle');
 					return;
 				}
 				item.n = 0;
