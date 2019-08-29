@@ -376,12 +376,26 @@ function playSound (type) {
 			generateSound(2600, 1, 10, 50, 0.2);
 		}, 80);
 		break;
+	case 'back':
+		generateSound(800, -40, 30, 15, 0.5, 2);
+		break;
+	case 'random':
+		generateSound(500, -200, 10, 10, 0.25, 1);
+		break;
+	case 'toggle':
+		generateSound(750, -30, 5, 20, 0.5);
+		setTimeout(function () {
+			generateSound(150, 30, 5, 20, 0.5);
+		}, 100);
+		break;
 	case 'end':
 		generateSound(800, -40, 25, 20, 0.5, 2);
 		break;
-	//TODO
-	case 'back':
 	case 'speed':
+		generateSound(150, 30, 2, 20, 0.5, 2);
+		setTimeout(function () {
+			generateSound(150, 30, 2, 20, 0.5, 2);
+		}, 150);
 		break;
 	default: //shouldn't happen TODO remove
 		console.warn('sound');
@@ -478,12 +492,14 @@ function initCanvas (callback) {
 	function keyDownHandler (e) {
 		switch (e.key || e.keyCode) {
 		case 27:
+		case 'Esc': //old deprecated value
 		case 'Escape':
 			if (!isRunning) {
 				handleEvent('menu');
 			}
 			break;
 		case 32:
+		case 'Spacebar': //old deprecated value
 		case ' ':
 			if (isRunning) {
 				handleEvent('speed');
@@ -680,7 +696,7 @@ This part contains all functions for managing rounds, starting and ending them.
 function waitEject (ballX, callback, v) {
 	var mode, startX, startY, keyX, keyY;
 
-	function getSpeedFromDrag(x, y) {
+	function getSpeedFromDrag (x, y) {
 		var d, f;
 		if (ballX === 0 && x > 0) {
 			return;
@@ -789,12 +805,12 @@ function waitEject (ballX, callback, v) {
 			}
 			break;
 		case 37:
-		case 'Left':
+		case 'Left': //old deprecated value
 		case 'ArrowLeft':
 			dir = -1;
 			/*falls through*/
 		case 39:
-		case 'Right':
+		case 'Right': //old deprecated value
 		case 'ArrowRight':
 			if (mode !== 'k') {
 				startX = TOTAL_WIDTH / 2;
@@ -1305,9 +1321,11 @@ function doStep (t) {
 					collision = getCollisionSpeed(10 * Math.random(), 10 * Math.random(), ball.vx, ball.vy);
 					ball.vx = collision.vx;
 					ball.vy = collision.vy;
+					playSound('random');
 					break;
 				case 6: //toggle walls
 					noWalls = !noWalls;
+					playSound('toggle');
 					break;
 				case 7: //bomb
 					r = item.r / LARGE_R * GRID;
