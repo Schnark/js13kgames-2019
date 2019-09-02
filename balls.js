@@ -171,7 +171,7 @@ function getCollisionSpeed (x, y, vx, vy) {
 function isFullscreen () {
 	return document.fullscreenElement ||
 		document.mozFullScreenElement ||
-		document.webketFullscreenElement ||
+		document.webkitFullscreenElement ||
 		document.msFullscreenElement ||
 		document.webkitIsFullScreen;
 }
@@ -202,6 +202,10 @@ function toggleFullscreen () {
 	}
 }
 
+function formatHtml (txt) {
+	return '<p>' + txt.replace(/\n/g, '</p><p>') + '</p>';
+}
+
 /*
 C. Initialising
 This part contains the code to iniatilize the game, i.e. that part of the game
@@ -220,78 +224,137 @@ function playGame (type) {
 	initSound();
 	initCanvas(function () {
 		play(function () {
-			var msg = ['Game over.'], records = getRecords();
+			var msg = ['Game over.'], msg2, records = getRecords();
 			if (roundNumber > (records[gameType] || 0)) {
 				records[gameType] = roundNumber;
 				storePersistent('records', JSON.stringify(records));
 				msg.push('New record!');
 			}
-			if (document.monetization && document.monetization.state === 'started') {
+			if (
+				(document.monetization && document.monetization.state === 'started') ||
+				location.search === '?monetization-cheater'
+			) {
 				starCount += 5;
 				storePersistent('stars', starCount);
-				msg.push('', 'As a Web Monetization', 'supporter, you get', '5 extra stars!');
+				msg2 = ['As a Web Monetization', 'supporter, you get', '5 extra stars!'];
 			}
-			drawLost(msg);
+			drawLost(msg, msg2);
 			playSound('end');
 		}, type);
 	});
 }
 
-function showIntro (callback, force) {
-	var button, introTxt = '(Note: Just skip the intro for now and start playing, it isn’t ready yet.)\nEver since you read <i>The War of the Worlds</i>, a documentary on the first invasion from Mars, you feared—like the author—that one day the Martians might come back.\nEven though your friends laughed a great deal about it, you decided to built a bullet from the remains of their artillery. It’s just one bullet, which will hardly be enough, but you hope that when the Martians do come back, you can collect material for more bullets before they are able to land.\nAnd then it happens: One night you are awakened by a bright light, and you see Martian spaceships decending. Now it is your chance to prove to your friends that you were right. But it’s more than that: The fate of all human beeings might depend on whether you succeed to destroy the Martian spaceships before they can land.\nGood luck!';
+function showIntro (html, label, callback, i, force) {
+	var button;
 
 	function clickHander () {
-		storePersistent('intro', 1);
+		storePersistent('intro', i + 1);
 		button.removeEventListener('click', clickHander);
 		callback();
 	}
 
-	if (!force && getPersistent('intro')) {
+	if (!force && (getPersistent('intro') || 0) > i) {
 		callback();
 		return;
 	}
-	document.body.innerHTML = '<p>' + introTxt.replace(/\n/g, '</p><p>') + '</p><p><button id="start">Start</button></p>';
-	button = document.getElementById('start');
+
+	document.body.innerHTML = html + '<p><button id="button">' + label + '</button></p>';
+	button = document.getElementById('button');
 	button.addEventListener('click', clickHander);
 }
 
+function showFirstIntro (callback, force) {
+	var introTxt = 'Ever since you read <i>The War of the Worlds</i>, a documentary on the first invasion from Mars, you feared—like its author—that one day the Martians might come back.\nEven though your friends laughed a great deal about it, you decided to built a bullet from the remains of their artillery. It’s just one bullet, which will hardly be enough, but you hope that when the Martians do come back, you can collect material for more bullets before they are able to land.\nAnd then it happens: One night you are awakened by a bright light, and you see Martian spaceships decending. Now it is your chance to prove to your friends that you were right. But it’s more than that: The fate of all human beeings might depend on whether you succeed to destroy the Martian spaceships before they can land.\nGood luck!'; //TODO
+	showIntro('<h1>The Martians are Back!</h1>' + formatHtml(introTxt), 'Start', callback, 0, force);
+}
+
+function showIntroBeforeLevel (type, intro) {
+	var html = [ //TODO
+		'You don’t know how the first attack was defeated, after the first Matian spaceship reached the ground. And you don’t have the time to think about it, for the second attack is already coming.\nAnd this time the attack is even more dangerous: The clouds won’t do any harm to your bullets, just reflect them randomly. But beware of the deadly Heat-Rays. They won’t do any real harm when they reach the earth, but they will destroy your bullets when you hit them.\nThere are also some magical items that will send all your bullets <b>back</b> the way they came.',
+		'It seems like the Martians are trying a new formation to attack.',
+		'As if Martian spaceships weren’t enough, there are even more special items coming down along with them. There are obstacles, which will block your bullets, but there are also bombs, which will destroy anything—fortunately except your bullets—around them when your bullets trigger an explosion.\nAnd there are also some other magical items that allow your bullets to pass through the outer borders.',
+		'“What’s this?”, you wonder. “The Martians no longer attack in an ordered formation, but with spaceships of different sizes, coming down from everywhere!”'
+	];
+	if (intro) {
+		showIntro(formatHtml(html[intro - 1]), 'Start game', function () {
+			playGame(type);
+		}, intro);
+	} else {
+		playGame(type);
+	}
+}
+
+function showOutro (callback, intro, force) {
+	var outro = 'Again a Martian spaceship landed on earth, because you didn’t succeed to shoot it in time. You gasp as the spaceship slowly opens, “That’s the end!”, you think. You scream loudly—and suddenly awake.\n“Did I sleep?”, you think. And then you realize that the attack from Mars wasn’t real, it was just a dream.\nYou look up into the sky, a peaceful sky without spaceships attacking you.\nBut what’s that, up there, to far away to see properly? It could be something you just imagine, but you decide that it’s better to be on the safe side. So you keep practicing to defend earth from Martian spaceships. You never know when they come back.'; //TODO
+	showIntro(formatHtml(outro), 'Continue playing', callback, intro, force);
+}
+
+function buildMenuHtml () {
+	function makeButton (level, enabled, record) {
+		return '<p><button ' + (enabled ? ('data-type="' + level.type + '"') : 'disabled') + (level.intro ? ' data-intro="' + level.intro + '"' : '') + '>' +
+			level.label + (record ? '<br>Your record: ' + record : '') +
+			'</button></p>';
+	}
+
+	var levels = [
+		{type: 'hex-0', label: 'First Attack'},
+		{type: 'hex-1', label: 'Second Attack', stars: 10, intro: 1},
+		{type: 'square-0', label: 'Third Attack', stars: 20, intro: 2},
+		{type: 'square-2', label: 'Fourth Attack', stars: 30, intro: 3},
+		{type: 'chaos-2', label: 'Fifth Attack', stars: 40, intro: 4},
+		{type: 'outro', label: 'The End', stars: 50, intro: 5}
+	], html = [], i, level, enabled = true, record, records = getRecords();
+
+	html.push('<p><button data-type="fullscreen">Toggle fullscreen</button></p>');
+	if (getPersistent('state')) {
+		if (menuShownFirstTime) {
+			html.push('<p>Welcome back! Do you want to resume your last game?</p>');
+		}
+		html.push(makeButton({type: 'restore', label: menuShownFirstTime ? 'Resume Last Game' : 'Continue Current Game'}, true));
+	}
+	html.push('<div class="border">');
+	html.push('<p><button data-type="intro">Show Intro Again</button></p>');
+	for (i = 0; i < levels.length; i++) {
+		level = levels[i];
+		if (enabled && (level.stars || 0) > starCount) {
+			enabled = false;
+			html.push('<p>You collected ' + starCount + ' stars so far. Collect ' + level.stars + ' to unlock the next level.</p>'); //TODO
+		}
+		record = records[level.type];
+		html.push(makeButton(level, enabled, record));
+		if (enabled && !record && level.type !== 'outro') {
+			enabled = false;
+			html.push('<p>' + (starCount ? 'You collected ' + starCount + ' stars so far. ' : '') + 'Finish the previous level to unlock the next level.</p>'); //TODO
+		}
+	}
+	if (enabled) {
+		html.push('<p>You collected ' + starCount + ' stars so far.</p>');
+	}
+	html.push('</div>');
+
+	return '<div id="menu">' + html.join('') + '</div>';
+}
+
 function initMenu () {
+	var menu;
+
 	function clickHander (e) {
-		var type = e.target.dataset.type;
+		var type = e.target.dataset.type, intro = e.target.dataset.intro;
 		if (type === 'fullscreen') {
 			toggleFullscreen();
 		} else if (type) {
 			menu.removeEventListener('click', clickHander);
 			if (type === 'intro') {
-				showIntro(initMenu, true);
+				showFirstIntro(initMenu, true);
+			} else if (type === 'outro') {
+				showOutro(initMenu, intro, true);
 			} else {
-				playGame(type);
+				showIntroBeforeLevel(type, intro);
 			}
 		}
 	}
 
-	var levels = [
-		{type: 'hex', label: 'Easy (Hex)'},
-		{type: 'hex-special', label: 'Surprise (Hex, Special)', stars: 10},
-		{type: 'square', label: 'Classical', stars: 20},
-		{type: 'square-special', label: 'Good Luck (Square, Special)', stars: 30},
-		{type: 'chaos', label: 'Chaos', stars: 40},
-		{type: 'chaos-special', label: 'Special Chaos', stars: 50}
-	], html, menu, records = getRecords();
-	if (getPersistent('state')) {
-		levels.unshift({type: 'restore', label: menuShownFirstTime ? 'Resume last game' : 'Continue current game'});
-	}
-	html = levels.map(function (level) {
-		var enabled = (level.stars || 0) <= starCount;
-		return '<p><button ' + (enabled ? ('data-type="' + level.type + '"') : 'disabled') + '>' +
-			level.label + (enabled ? (records[level.type] ? '<br>Your record: ' + records[level.type] : '') : ('<br>Collect ' + level.stars + ' stars to unlock')) +
-			'</button></p>';
-	});
-
-	html.unshift('<p>Total stars so far: ' + starCount + '</p>');
-	html.push('<p><button data-type="intro">Show intro again</button></p>');
-	html.push('<p><button data-type="fullscreen">Toggle fullscreen</button></p>');
-	document.body.innerHTML = '<div id="menu">' + html.join('') + '</div>';
+	document.body.innerHTML = buildMenuHtml();
 	menu = document.getElementById('menu');
 	menu.addEventListener('click', clickHander);
 	menuShownFirstTime = false;
@@ -360,8 +423,6 @@ function playSound (type) {
 		generateSound(100, -10, 15, 15, 1, 2);
 		break;
 	case 'item-0':
-	case 'die':
-	case 'explode':
 		generateSound(100, -10, 10, 25, 0.5);
 		generateSound(125, -5, 20, 45, 0.1, 1);
 		generateSound(40, 2, 20, 20, 1, 2);
@@ -371,21 +432,28 @@ function playSound (type) {
 		generateSound(150, 30, 15, 20, 0.5, 2);
 		break;
 	case 'star':
-		generateSound(510, 0, 15, 20, 0.1);
+		generateSound(510, 0, 15, 20, 0.05);
 		setTimeout(function () {
-			generateSound(2600, 1, 10, 50, 0.2);
+			generateSound(2600, 1, 10, 50, 0.1);
 		}, 80);
 		break;
 	case 'back':
 		generateSound(800, -40, 30, 15, 0.5, 2);
 		break;
+	case 'die':
+	case 'explode':
+		generateSound(100, -10, 10, 25, 0.75);
+		generateSound(125, -5, 20, 45, 0.2, 1);
+		generateSound(40, 2, 20, 20, 1, 2);
+		generateSound(200, -4, 10, 100, 0.5, 2);
+		break;
 	case 'random':
 		generateSound(500, -200, 10, 10, 0.25, 1);
 		break;
 	case 'toggle':
-		generateSound(750, -30, 5, 20, 0.5);
+		generateSound(750, -30, 5, 20, 0.25);
 		setTimeout(function () {
-			generateSound(150, 30, 5, 20, 0.5);
+			generateSound(150, 30, 5, 20, 0.25);
 		}, 100);
 		break;
 	case 'end':
@@ -396,9 +464,6 @@ function playSound (type) {
 		setTimeout(function () {
 			generateSound(150, 30, 2, 20, 0.5, 2);
 		}, 150);
-		break;
-	default: //shouldn't happen TODO remove
-		console.warn('sound');
 	}
 }
 
@@ -427,18 +492,18 @@ function initCanvas (callback) {
 		if (y < PANEL_HEIGHT) {
 			if (x < PANEL_HEIGHT) {
 				return isRunning ? {
-					title: 'Speed up',
+					title: 'Speed up [Space]',
 					action: 'speed'
 				} : {
-					title: 'Back to menu',
+					title: 'Back to menu [Esc]',
 					action: 'menu'
 				};
 			} else if (x > TOTAL_WIDTH - PANEL_HEIGHT) {
 				return isMuted ? {
-					title: 'Unmute',
+					title: 'Unmute [M]',
 					action: 'togglemute'
 				} : {
-					title: 'Mute',
+					title: 'Mute [M]',
 					action: 'togglemute'
 				};
 			}
@@ -497,6 +562,7 @@ function initCanvas (callback) {
 			if (!isRunning) {
 				handleEvent('menu');
 			}
+			e.preventDefault();
 			break;
 		case 32:
 		case 'Spacebar': //old deprecated value
@@ -504,9 +570,10 @@ function initCanvas (callback) {
 			if (isRunning) {
 				handleEvent('speed');
 			}
+			e.preventDefault();
 			break;
-		case 83:
-		case 's':
+		case 77:
+		case 'm':
 			handleEvent('togglemute');
 			e.preventDefault();
 		}
@@ -614,7 +681,7 @@ function draw () {
 		var state = (animation.dur - animation.t) / animation.dur, m;
 		switch (animation.type) {
 		case 'remove-item':
-			ctx.fillStyle = 'hsla(' + START_COLOR + ',' + (100 * state) + '%,50%,' + state + ')';
+			ctx.fillStyle = 'hsla(' + START_COLOR + ',' + (100 * state).toFixed() + '%,50%,' + state.toFixed(2) + ')';
 			ctx.beginPath();
 			ctx.arc(SMALL_R + animation.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - animation.y, animation.r * state, 0, 2 * Math.PI);
 			ctx.fill();
@@ -622,19 +689,19 @@ function draw () {
 		case 'die':
 			//TODO improve or decide to use as is
 			m = state < 2 / 3 ? 3 * state / 2 : 3 * (1 - state);
-			ctx.fillStyle = 'hsla(60,100%,' + (50 + 50 * m) + '%,' + m + ')';
+			ctx.fillStyle = 'hsla(60,100%,' + (50 + 50 * m).toFixed() + '%,' + m.toFixed(2) + ')';
 			ctx.beginPath();
 			ctx.arc(SMALL_R + animation.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - animation.y, animation.r - animation.r * state, 0, 2 * Math.PI);
 			ctx.fill();
 			break;
 		case 'explode':
-			ctx.fillStyle = 'rgba(255,255,255,' + state + ')';
+			ctx.fillStyle = 'rgba(255,255,255,' + state.toFixed(2) + ')';
 			ctx.beginPath();
 			ctx.arc(SMALL_R + animation.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - animation.y, animation.r - animation.r * state, 0, 2 * Math.PI);
 			ctx.fill();
 			break;
 		case 'hit':
-			ctx.fillStyle = 'rgba(255,255,255,' + (state / 2) + ')';
+			ctx.fillStyle = 'rgba(255,255,255,' + (state / 2).toFixed(2) + ')';
 			ctx.beginPath();
 			ctx.arc(SMALL_R + animation.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - animation.y, animation.r * state, 0, 2 * Math.PI);
 			ctx.fill();
@@ -660,13 +727,22 @@ function drawNumberBalls (n, x) {
 	drawText(n, SMALL_R + x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT, 2 * SMALL_R, 2 * SMALL_R);
 }
 
-function drawLost (texts) {
-	var i;
+function drawLost (texts, texts2) {
+	var i, start;
 	ctx.fillStyle = 'rgba(0,0,0,0.7)';
 	ctx.fillRect(0, PANEL_HEIGHT, TOTAL_WIDTH, TOTAL_HEIGHT - PANEL_HEIGHT);
 	ctx.fillStyle = 'white';
+	start = TOTAL_HEIGHT / 2 + PANEL_HEIGHT / 2 - (texts.length - 1) / 2 * 1.5 * GRID;
+	if (texts2) {
+		start -= GRID;
+	}
 	for (i = 0; i < texts.length; i++) {
-		drawText(texts[i], TOTAL_WIDTH / 2, TOTAL_HEIGHT / 2 + PANEL_HEIGHT / 2 - (texts.length - 1) / 2 * 1.5 * GRID + 1.5 * GRID * i, TOTAL_WIDTH, 1.5 * GRID);
+		drawText(texts[i], TOTAL_WIDTH / 2, start + 1.5 * GRID * i, TOTAL_WIDTH, 1.5 * GRID);
+	}
+	if (texts2) {
+		for (i = 0; i < texts2.length; i++) {
+			drawText(texts2[i], TOTAL_WIDTH / 2, TOTAL_HEIGHT / 2 + PANEL_HEIGHT / 2 + 0.75 * GRID * texts.length + GRID + GRID * i, TOTAL_WIDTH, GRID);
+		}
 	}
 }
 
@@ -860,6 +936,7 @@ function waitEject (ballX, callback, v) {
 	}
 }
 
+/*
 function addNewItems () {
 	var i, hex = gameType.slice(0, 3) === 'hex', allSpecial = gameType.indexOf('-special') > -1;
 
@@ -963,6 +1040,173 @@ function addNewItems () {
 			});
 		}
 		doLine(1, getN);
+	}
+}
+*/
+
+function addNewItems () {
+	var n, a, i, type = gameType.split('-');
+
+	function getArray (n) {
+		var a = [], p;
+		p = Math.min(0.4, Math.sqrt(roundNumber / 100));
+		if (roundNumber === 1) {
+			p *= 2; //two rows, so double
+		}
+		a.push(Math.ceil((Math.floor(Math.random() * 3) / 2 + 1) * ballCount));
+		if (roundNumber === 1) {
+			a.push(2);
+		}
+		if (Math.random() < p) {
+			a.push(ballCount);
+		}
+		if (Math.random() < p) {
+			a.push(Math.ceil((Math.floor(Math.random() * 2) / 2 + 1) * ballCount));
+		}
+		if (Math.random() < p) {
+			a.push(Math.ceil(1.5 * ballCount));
+		}
+		if (Math.random() < p) {
+			a.push(Math.ceil((Math.floor(Math.random() * 2) / 2 + 1.5) * ballCount));
+		}
+		if (Math.random() < p) {
+			a.push(2 * ballCount);
+		}
+		if (type !== 'hex' && Math.random() < p) {
+			a.push(2 * ballCount);
+		}
+		if (type === 'choas' && Math.random() < 2 * p) {
+			a.push(2 * ballCount);
+		}
+		p = 0.9 * Math.pow(2 / 3, ballCount / 18);
+		if (roundNumber === 1) {
+			a.push(-1);
+		}
+		if (Math.random() < p) {
+			a.push(-1);
+		}
+		if (type[1] > 0 && Math.random() < (1 - p) / 3) {
+			a.push(-4);
+		}
+		if (a.length < n) {
+			p = starCount < 5 ? 0.2 : 0.1;
+			if (roundNumber === 1) {
+				a.push(-2);
+			}
+			if (Math.random() < p) {
+				a.push(-2);
+			} else if (type[1] > 0) {
+				if (Math.random() < 0.3) {
+					a.push([-3, -5, -6, -7, -8][Math.floor(Math.random() * (3 * type[1] - 1))]);
+				}
+				if (Math.random() < 0.3) {
+					a.push([-3, -5, -6, -7, -8][Math.floor(Math.random() * (3 * type[1] - 1))]);
+				}
+			}
+		}
+		while (a.length < n) {
+			a.push(0);
+		}
+		return mix(a);
+	}
+
+	function mix (a) {
+		var i, out = [];
+		while (a.length) {
+			i = Math.floor(Math.random() * a.length);
+			out.push(a.splice(i, 1)[0]);
+		}
+		return out;
+	}
+
+	function doLine (h, a) {
+		var x, start, d;
+		if (type[0] === 'hex') {
+			d = 2 * GRID / Math.sqrt(3);
+			start = (roundNumber + h) % 2 ? d : d / 2;
+		} else {
+			d = GRID;
+			start = GRID / 2;
+		}
+		for (x = start; x <= TOTAL_WIDTH - LARGE_R; x += d) {
+			allItems.push({
+				x: x - SMALL_R,
+				y: INNER_HEIGHT - GRID / 2 - h * GRID + SMALL_R,
+				r: LARGE_R,
+				n: a.pop()
+			});
+		}
+	}
+
+	function doChaos (c, h, a) {
+		var i, j, n, r, x, y, tries, good;
+		for (i = 0; i < c; i++) {
+			n = a.pop();
+			if (n === 0) {
+				continue;
+			}
+			for (tries = 0; tries < 50; tries++) {
+				r = LARGE_R * [0.75, 0.75, 1, 1, 1, 1.2][Math.floor(Math.random() * 6)],
+				x = r + (TOTAL_WIDTH - 2 * r) * Math.random() - SMALL_R;
+				y = INNER_HEIGHT - r - Math.random() * 2 * GRID + SMALL_R - h;
+				good = true;
+				for (j = 0; j < allItems.length; j++) {
+					if (pythagoras(x - allItems[j].x, y - allItems[j].y) < (r + allItems[j].r) * (r + allItems[j].r)) {
+						good = false;
+						break;
+					}
+				}
+				if (good) {
+					allItems.push({
+						x: x,
+						y: y,
+						r: r,
+						n: n
+					});
+					break;
+				}
+			}
+		}
+	}
+
+	if (roundNumber === 1) {
+		n = 2 * WIDTH;
+		if (type[0] === 'hex') {
+			n -= 3;
+		}
+		a = getArray(n);
+		if (type[0] === 'chaos') {
+			doChaos(n, 0, a);
+		} else {
+			for (i = 1; i < 3; i++) {
+				doLine(i, a);
+			}
+		}
+	} else {
+		if (allItems.length === 0) {
+			//all cleared -> grant a row with stars
+			a = [];
+			for (i = 0; i < WIDTH; i++) {
+				a.push(-2);
+			}
+			if (type[0] === 'chaos') {
+				doChaos(WIDTH, 2 * GRID, a);
+			} else {
+				doLine(2, a);
+			}
+		}
+		n = WIDTH;
+		if (type[0] === 'hex') {
+			n -= roundNumber % 2 ? 1 : 2;
+		} else if (type[0] === 'chaos') {
+			n = Math.ceil(1.5 * n);
+		}
+		a = getArray(n);
+		if (type[0] === 'chaos') {
+			doChaos(n, 0, a);
+		} else {
+			doLine(1, a);
+		}
 	}
 }
 
@@ -1414,6 +1658,6 @@ H. Init
 This part really iniatilizes everything and get's the game started.
 */
 initVars();
-showIntro(initMenu);
+showFirstIntro(initMenu);
 
 })();

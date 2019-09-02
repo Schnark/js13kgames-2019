@@ -16,7 +16,8 @@ canvas {
 }
 button {
 	display: block;
-	width: 20em;
+	width: 100%;
+	max-width: 20em;
 	margin: auto;
 	border-radius: 20px;
 	font-size: 20px;
@@ -24,4 +25,17 @@ button {
 }
 p {
 	margin: 2em;
+}
+
+h1 {
+	text-align: center;
+}
+
+.border {
+	border: solid thin;
+}
+
+#menu {
+	max-width: 25em;
+	margin: auto;
 }
