@@ -4,7 +4,11 @@
 /*
 Sorry, the code is a mess, as almost everything is global. But passing around objects with
 getters and setters doesn't really fit, so there's not so much of an alternative.
-I tried to excessively comment the code instead, and hope that helps.
+I tried to comment the code instead more than usual, and hope that helps.
+
+The script only uses ES5 and supports some outdated browsers, because I usually have to
+support them, and also want to eventually turn this into an app for FFOS, so I have to
+support them, too.
 */
 /*
 TOC
@@ -22,7 +26,8 @@ H. Init
 A. Global variables
 This part contains all global variables.
 */
-var GRID = 60, //size of grid unit in pixels (TODO or use something 48/72-based? Then also SMALL_R = GRID * 5 / 24)
+var SVG,
+	GRID = 60, //size of grid unit in pixels (TODO or use something 48/72-based? Then also SMALL_R = GRID * 5 / 24)
 	SMALL_R = GRID * 0.2, //radius of small balls
 	LARGE_R = 2 * SMALL_R, //typical radius of items (but may vary)
 	PANEL_HEIGHT = GRID, //height of panel in pixels
@@ -84,7 +89,11 @@ type: type of animation
 	audio, //audio context
 	disableEject, //function to remove all events related to ejecting
 	menuShownFirstTime = true, //menu is shown for the first time in this session
-	rAF = window.requestAnimationFrame || window.mozRequestAnimationFrame;
+	rAF = window.requestAnimationFrame || window.mozRequestAnimationFrame ||
+		window.webkitRequestAnimationFrame || window.oRequestAnimationFrame;
+
+//to embed the file icon.svg, uncomment the following line and insert the minified file as string
+//SVG = '';
 
 /*
 B. Utility functions
@@ -202,6 +211,10 @@ function toggleFullscreen () {
 	}
 }
 
+function scrollTop () {
+	window.scrollTo(0, 0);
+}
+
 function formatHtml (txt) {
 	return '<p>' + txt.replace(/\n/g, '</p><p>') + '</p>';
 }
@@ -258,9 +271,10 @@ function showIntro (html, label, callback, i, force) {
 		return;
 	}
 
-	document.body.innerHTML = html + '<p><button id="button">' + label + '</button></p>';
+	document.body.innerHTML = '<div id="intro">' + html + '<p><button id="button">' + label + '</button></p></div>';
 	button = document.getElementById('button');
 	button.addEventListener('click', clickHander);
+	scrollTop();
 }
 
 function showFirstIntro (callback, force) {
@@ -291,9 +305,35 @@ function showOutro (callback, intro, force) {
 
 function buildMenuHtml () {
 	function makeButton (level, enabled, record) {
-		return '<p><button ' + (enabled ? ('data-type="' + level.type + '"') : 'disabled') + (level.intro ? ' data-intro="' + level.intro + '"' : '') + '>' +
+		return '<p><button ' + (enabled ? ('data-type="' + level.type + '"') : 'disabled') +
+			(level.intro ? ' data-intro="' + level.intro + '"' : '') + '>' +
 			level.label + (record ? '<br>Your record: ' + record : '') +
 			'</button></p>';
+	}
+
+	function getUnlockText (level, stars, prev) {
+		var html = ['<p>'];
+		if (stars || prev) {
+			html.push('You collected ' + stars + ' star' + (Number(stars) === 1 ? '' : 's') + ' so far.');
+		}
+		if (level) {
+			html.push(' ');
+			if (!prev && stars < level.stars) {
+				html.push('Finish the previous level and collect ' + level.stars + ' stars');
+			} else if (!prev) {
+				html.push('Finish the previous level');
+			} else {
+				html.push('Collect ' + level.stars + ' stars');
+			}
+			html.push(' to ');
+			if (level.type === 'outro') {
+				html.push('read how the story ends.');
+			} else {
+				html.push('unlock the next level.');
+			}
+		}
+		html.push('</p>');
+		return html.join('');
 	}
 
 	var levels = [
@@ -305,30 +345,32 @@ function buildMenuHtml () {
 		{type: 'outro', label: 'The End', stars: 50, intro: 5}
 	], html = [], i, level, enabled = true, record, records = getRecords();
 
-	html.push('<p><button data-type="fullscreen">Toggle fullscreen</button></p>');
 	if (getPersistent('state')) {
 		if (menuShownFirstTime) {
 			html.push('<p>Welcome back! Do you want to resume your last game?</p>');
 		}
-		html.push(makeButton({type: 'restore', label: menuShownFirstTime ? 'Resume Last Game' : 'Continue Current Game'}, true));
+		html.push(
+			makeButton({type: 'restore', label: menuShownFirstTime ? 'Resume Last Game' : 'Continue Current Game'}, true)
+		);
 	}
+	html.push('<p><button data-type="fullscreen">Toggle Fullscreen</button></p>');
 	html.push('<div class="border">');
 	html.push('<p><button data-type="intro">Show Intro Again</button></p>');
 	for (i = 0; i < levels.length; i++) {
 		level = levels[i];
 		if (enabled && (level.stars || 0) > starCount) {
 			enabled = false;
-			html.push('<p>You collected ' + starCount + ' stars so far. Collect ' + level.stars + ' to unlock the next level.</p>'); //TODO
+			html.push(getUnlockText(level, starCount, true));
 		}
 		record = records[level.type];
 		html.push(makeButton(level, enabled, record));
 		if (enabled && !record && level.type !== 'outro') {
 			enabled = false;
-			html.push('<p>' + (starCount ? 'You collected ' + starCount + ' stars so far. ' : '') + 'Finish the previous level to unlock the next level.</p>'); //TODO
+			html.push(getUnlockText(levels[i + 1], starCount, false));
 		}
 	}
 	if (enabled) {
-		html.push('<p>You collected ' + starCount + ' stars so far.</p>');
+		html.push(getUnlockText(false, starCount));
 	}
 	html.push('</div>');
 
@@ -358,6 +400,7 @@ function initMenu () {
 	menu = document.getElementById('menu');
 	menu.addEventListener('click', clickHander);
 	menuShownFirstTime = false;
+	scrollTop();
 }
 
 /*
@@ -482,9 +525,11 @@ function loadImage (url, w, h, callback) {
 	img.src = url;
 }
 
+//create and init canvas, load icons
 function initCanvas (callback) {
 	var canvas;
 
+	//check whether the event indicates we are on a "button", and if so which one
 	function getAction (e) {
 		var x, y;
 		x = (e.clientX - e.target.offsetLeft) / e.target.clientWidth * TOTAL_WIDTH;
@@ -611,12 +656,13 @@ function initCanvas (callback) {
 		return;
 	}
 
-	loadImage('icons.svg', GRID, 12 * GRID, function (canvas) {
+	loadImage(SVG ? 'data:image/svg+xml;base64,' + btoa(SVG) : 'icons.svg', GRID, 12 * GRID, function (canvas) {
 		icons = canvas;
 		callback();
 	});
 }
 
+//scale canvas to fit on screen
 function resize () {
 	var docEl = document.documentElement, scale, style;
 	scale = Math.min(isFullscreen() ? 2 : 1, docEl.clientWidth / TOTAL_WIDTH, docEl.clientHeight / TOTAL_HEIGHT);
@@ -646,7 +692,11 @@ function drawPanel () {
 	ctx.fillStyle = 'black';
 	ctx.fillRect(0, 0, TOTAL_WIDTH, PANEL_HEIGHT);
 	ctx.fillStyle = 'white';
-	drawText(roundNumber, TOTAL_WIDTH / 2, PANEL_HEIGHT / 2, TOTAL_WIDTH - 3 * PANEL_HEIGHT, PANEL_HEIGHT);
+	drawText((livingBallCount || ballCount) + '●', TOTAL_WIDTH * 2 / 7, PANEL_HEIGHT * 3 / 5,
+		TOTAL_WIDTH * 3 / 14, PANEL_HEIGHT * 3 / 5);
+	drawText(roundNumber, TOTAL_WIDTH / 2, PANEL_HEIGHT / 2, TOTAL_WIDTH * 3 / 14, PANEL_HEIGHT);
+	drawText(starCount + '★', TOTAL_WIDTH * 5 / 7, PANEL_HEIGHT * 3 / 5,
+		TOTAL_WIDTH * 3 / 14, PANEL_HEIGHT * 3 / 5);
 	if (isRunning) {
 		drawIcon(9, PANEL_HEIGHT / 2, PANEL_HEIGHT / 2, PANEL_HEIGHT);
 	} else {
@@ -683,27 +733,30 @@ function draw () {
 		case 'remove-item':
 			ctx.fillStyle = 'hsla(' + START_COLOR + ',' + (100 * state).toFixed() + '%,50%,' + state.toFixed(2) + ')';
 			ctx.beginPath();
-			ctx.arc(SMALL_R + animation.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - animation.y, animation.r * state, 0, 2 * Math.PI);
+			ctx.arc(SMALL_R + animation.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - animation.y,
+				animation.r * state, 0, 2 * Math.PI);
 			ctx.fill();
 			break;
 		case 'die':
-			//TODO improve or decide to use as is
 			m = state < 2 / 3 ? 3 * state / 2 : 3 * (1 - state);
 			ctx.fillStyle = 'hsla(60,100%,' + (50 + 50 * m).toFixed() + '%,' + m.toFixed(2) + ')';
 			ctx.beginPath();
-			ctx.arc(SMALL_R + animation.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - animation.y, animation.r - animation.r * state, 0, 2 * Math.PI);
+			ctx.arc(SMALL_R + animation.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - animation.y,
+				animation.r - animation.r * state, 0, 2 * Math.PI);
 			ctx.fill();
 			break;
 		case 'explode':
 			ctx.fillStyle = 'rgba(255,255,255,' + state.toFixed(2) + ')';
 			ctx.beginPath();
-			ctx.arc(SMALL_R + animation.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - animation.y, animation.r - animation.r * state, 0, 2 * Math.PI);
+			ctx.arc(SMALL_R + animation.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - animation.y,
+				animation.r - animation.r * state, 0, 2 * Math.PI);
 			ctx.fill();
 			break;
 		case 'hit':
 			ctx.fillStyle = 'rgba(255,255,255,' + (state / 2).toFixed(2) + ')';
 			ctx.beginPath();
-			ctx.arc(SMALL_R + animation.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - animation.y, animation.r * state, 0, 2 * Math.PI);
+			ctx.arc(SMALL_R + animation.x, PANEL_HEIGHT + SMALL_R + INNER_HEIGHT - animation.y,
+				animation.r * state, 0, 2 * Math.PI);
 			ctx.fill();
 			break;
 		}
@@ -740,8 +793,9 @@ function drawLost (texts, texts2) {
 		drawText(texts[i], TOTAL_WIDTH / 2, start + 1.5 * GRID * i, TOTAL_WIDTH, 1.5 * GRID);
 	}
 	if (texts2) {
+		start = TOTAL_HEIGHT / 2 + PANEL_HEIGHT / 2 + 0.75 * GRID * texts.length + GRID;
 		for (i = 0; i < texts2.length; i++) {
-			drawText(texts2[i], TOTAL_WIDTH / 2, TOTAL_HEIGHT / 2 + PANEL_HEIGHT / 2 + 0.75 * GRID * texts.length + GRID + GRID * i, TOTAL_WIDTH, GRID);
+			drawText(texts2[i], TOTAL_WIDTH / 2, start + GRID * i, TOTAL_WIDTH, GRID);
 		}
 	}
 }
@@ -935,114 +989,6 @@ function waitEject (ballX, callback, v) {
 		storePersistent('hint', 1);
 	}
 }
-
-/*
-function addNewItems () {
-	var i, hex = gameType.slice(0, 3) === 'hex', allSpecial = gameType.indexOf('-special') > -1;
-
-	//FIXME balance probabilities better (esp. for getNSpecial and doChaos)
-	function getN () {
-		if (allSpecial) {
-			return getNSpecial();
-		}
-		if (Math.random() < 0.4) {
-			return 0;
-		}
-		if (Math.random() < Math.min(0.15, 1 / ballCount)) {
-			return -1;
-		}
-		if (Math.random() < 0.1) {
-			return -2;
-		}
-		return Math.ceil(ballCount * Math.floor(2 + Math.random() * 3) / 2);
-	}
-
-	function getNSpecial () {
-		if (Math.random() < 0.3) {
-			return 0;
-		}
-		if (Math.random() < 0.2) {
-			return [-2, -2, -2, -3, -3, -5, -5, -6, -6, -7, -8, -8][Math.floor(Math.random() * 12)];
-		}
-		if (Math.random() < Math.min(0.15, 1 / ballCount)) {
-			return -1;
-		}
-		if (Math.random() < ballCount / 150) {
-			return -4;
-		}
-		return Math.ceil(ballCount * Math.floor(2 + Math.random() * 3) / 2);
-	}
-
-	function doLine (h, f) {
-		var x, start, d;
-		if (hex) {
-			d = 2 * GRID / Math.sqrt(3);
-			start = (roundNumber + h) % 2 ? d : d / 2;
-		} else {
-			d = GRID;
-			start = GRID / 2;
-		}
-		for (x = start; x <= TOTAL_WIDTH - LARGE_R; x += d) {
-			allItems.push({
-				x: x - SMALL_R,
-				y: INNER_HEIGHT - GRID / 2 - h * GRID + SMALL_R,
-				r: LARGE_R,
-				n: f()
-			});
-		}
-	}
-
-	function doChaos (c, f) {
-		var i, j, n, r, x, y, tries, good;
-		for (i = 0; i < c; i++) {
-			n = f();
-			if (n === 0) {
-				continue;
-			}
-			for (tries = 0; tries < 50; tries++) {
-				r = LARGE_R * [0.75, 0.75, 1, 1, 1, 1.2][Math.floor(Math.random() * 6)],
-				x = r + (TOTAL_WIDTH - 2 * r) * Math.random() - SMALL_R;
-				y = INNER_HEIGHT - r - Math.random() * 2 * GRID + SMALL_R;
-				good = true;
-				for (j = 0; j < allItems.length; j++) {
-					if (pythagoras(x - allItems[j].x, y - allItems[j].y) < (r + allItems[j].r) * (r + allItems[j].r)) {
-						good = false;
-						break;
-					}
-				}
-				if (good) {
-					allItems.push({
-						x: x,
-						y: y,
-						r: r,
-						n: n
-					});
-					break;
-				}
-			}
-		}
-	}
-
-	if (gameType.slice(0, 5) === 'chaos') {
-		doChaos(roundNumber === 1 ? 20 : 7, getN);
-		return;
-	}
-
-	if (roundNumber === 1) {
-		for (i = 1; i < 3; i++) {
-			doLine(i, getN);
-		}
-	} else {
-		if (allItems.length === 0) {
-			//all cleared -> grant a row with stars
-			doLine(2, function () {
-				return -2;
-			});
-		}
-		doLine(1, getN);
-	}
-}
-*/
 
 function addNewItems () {
 	var n, a, i, type = gameType.split('-');
@@ -1383,8 +1329,6 @@ function getNextCollision (x, y, vx, vy, noWall) {
 			action = index;
 		}
 		if (noWall) { //again with item on other side
-			//FIXME something doesn't work as expected sometimes, but it's hard to reproduce and thus difficult to fix
-			//perhaps it even already is fixed
 			t = getCollisionTime(x - item.x + (vx < 0 ? -TOTAL_WIDTH : TOTAL_WIDTH), y - item.y, vx, vy, item.r + SMALL_R);
 			if (t < time) {
 				time = t;
