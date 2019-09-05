@@ -285,9 +285,9 @@ function showFirstIntro (callback, force) {
 function showIntroBeforeLevel (type, intro) {
 	var html = [ //TODO
 		'You don’t know how the first attack was defeated, after the first Matian spaceship reached the ground. And you don’t have the time to think about it, for the second attack is already coming.\nAnd this time the attack is even more dangerous: The clouds won’t do any harm to your bullets, just reflect them randomly. But beware of the deadly Heat-Rays. They won’t do any real harm when they reach the earth, but they will destroy your bullets when you hit them.\nThere are also some magical items that will send all your bullets <b>back</b> the way they came.',
-		'It seems like the Martians are trying a new formation to attack.',
+		'It seems this night you won’t get any more sleep.\nNow the Martians are trying a new formation to attack.',
 		'As if Martian spaceships weren’t enough, there are even more special items coming down along with them. There are obstacles, which will block your bullets, but there are also bombs, which will destroy anything—fortunately except your bullets—around them when your bullets trigger an explosion.\nAnd there are also some other magical items that allow your bullets to pass through the outer borders.',
-		'“What’s this?”, you wonder. “The Martians no longer attack in an ordered formation, but with spaceships of different sizes, coming down from everywhere!”'
+		'In the twilight of the night you see the next attack wave coming.\n“What’s this?”, you wonder. “The Martians no longer attack in an ordered formation, but with spaceships of different sizes, coming down from everywhere!”'
 	];
 	if (intro) {
 		showIntro(formatHtml(html[intro - 1]), 'Start game', function () {
@@ -1035,7 +1035,7 @@ function addNewItems () {
 			a.push(-4);
 		}
 		if (a.length < n) {
-			p = starCount < 5 ? 0.2 : 0.1;
+			p = starCount < 5 ? 0.25 : 0.15;
 			if (roundNumber === 1) {
 				a.push(-2);
 			}
