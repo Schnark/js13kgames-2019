@@ -1,0 +1,24 @@
+#make manually (or find a shell with a very strong AI)
+
+icons.svg: ../icons.svg
+	remove comments and superflous whitespace
+
+game.css: ../game.css
+	remove comments and superflous whitespace and semicolons
+
+game-svg.js: ../game.js icons.min.svg
+	insert svg as string
+
+game.js: game-svg.js
+	minify-js game-svg.js > game.js
+
+game.html: ../game.html
+	remove comments and superflous whitespace
+	remove stylesheet and script
+	insert empty <style> and <script> tags
+
+index.html: game.html game.css game.js
+	insert style and script
+
+game.zip: index.html
+	zip -9 game index.html

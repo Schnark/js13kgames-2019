@@ -105,24 +105,21 @@ function pythagoras (x, y) {
 
 function storePersistent (key, val) {
 	try {
-		//TODO
-		sessionStorage.setItem(KEY_PREFIX + key, val);
+		localStorage.setItem(KEY_PREFIX + key, val);
 	} catch (e) {
 	}
 }
 
 function clearPersistent (key) {
 	try {
-		//TODO
-		sessionStorage.removeItem(KEY_PREFIX + key);
+		localStorage.removeItem(KEY_PREFIX + key);
 	} catch (e) {
 	}
 }
 
 function getPersistent (key) {
 	try {
-		//TODO
-		return sessionStorage.getItem(KEY_PREFIX + key);
+		return localStorage.getItem(KEY_PREFIX + key);
 	} catch (e) {
 	}
 }
