@@ -6,7 +6,7 @@ icons.svg: ../icons.svg
 game.css: ../game.css
 	remove comments and superflous whitespace and semicolons
 
-game-svg.js: ../game.js icons.min.svg
+game-svg.js: ../game.js icons.svg
 	insert svg as string
 
 game.js: game-svg.js

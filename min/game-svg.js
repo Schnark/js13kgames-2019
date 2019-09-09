@@ -821,7 +821,7 @@ This part contains all functions for managing rounds, starting and ending them.
 
 //Eject
 function waitEject (ballX, callback, v) {
-	var mode, startX, startY, keyX, keyY;
+	var mode, startX, startY, keyX, keyY, style;
 
 	function getSpeedFromDrag (x, y) {
 		var d, f;
@@ -959,7 +959,13 @@ function waitEject (ballX, callback, v) {
 		return;
 	}
 
-	document.documentElement.style.cursor = 'crosshair';
+	style = document.documentElement.style;
+	style.cursor = 'crosshair';
+	/*I can't really test iOS, so just try to fight with it*/
+	style.overscrollBehavior = 'none';
+	style.position = 'fixed';
+	style.width = '100%';
+
 	window.addEventListener('mousedown', mousedownHandler);
 	window.addEventListener('mousemove', mousemoveHandler);
 	window.addEventListener('mouseup', mouseupHandler);
@@ -969,7 +975,10 @@ function waitEject (ballX, callback, v) {
 	window.addEventListener('touchcancel', touchcancelHandler);
 	window.addEventListener('keydown', keyHandler);
 	disableEject = function () {
-		document.documentElement.style.cursor = '';
+		style.cursor = '';
+		style.overscrollBehavior = '';
+		style.position = '';
+		style.width = '';
 		window.removeEventListener('mousedown', mousedownHandler);
 		window.removeEventListener('mousemove', mousemoveHandler);
 		window.removeEventListener('mouseup', mouseupHandler);
