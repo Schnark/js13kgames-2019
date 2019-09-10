@@ -89,6 +89,7 @@ type: type of animation
 	audio, //audio context
 	disableEject, //function to remove all events related to ejecting
 	menuShownFirstTime = true, //menu is shown for the first time in this session
+	storageCache = {}, //cache for localStorage items
 	rAF = window.requestAnimationFrame || window.mozRequestAnimationFrame ||
 		window.webkitRequestAnimationFrame || window.oRequestAnimationFrame;
 
@@ -104,6 +105,7 @@ function pythagoras (x, y) {
 }
 
 function storePersistent (key, val) {
+	storageCache[key] = val;
 	try {
 		localStorage.setItem(KEY_PREFIX + key, val);
 	} catch (e) {
@@ -111,6 +113,7 @@ function storePersistent (key, val) {
 }
 
 function clearPersistent (key) {
+	delete storageCache[key];
 	try {
 		localStorage.removeItem(KEY_PREFIX + key);
 	} catch (e) {
@@ -118,8 +121,12 @@ function clearPersistent (key) {
 }
 
 function getPersistent (key) {
+	if (key in storageCache) {
+		return storageCache[key];
+	}
 	try {
-		return localStorage.getItem(KEY_PREFIX + key);
+		storageCache[key] = localStorage.getItem(KEY_PREFIX + key);
+		return storageCache[key];
 	} catch (e) {
 	}
 }
