@@ -10,3 +10,9 @@ There are several versions of the game:
 * Official version submitted for the competition is on https://2019.js13kgames.com/entries/the-martians-are-back
 * Perhaps I will create a variant of this game as hybrid FFOS app/PWA, like my other apps. This will probably live in a different repository.
 
+In case you're wondering how long one can survive when one spends very much time playing, here are my current records:
+* 1: 102
+* 2: 116
+* 3: 125
+* 4: 88
+* 5: 94
