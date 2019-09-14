@@ -14,5 +14,7 @@ In case you're wondering how long one can survive when one spends very much time
 * 1: 102
 * 2: 116
 * 3: 125
-* 4: 88
-* 5: 94
+* 4: 110
+* 5: 107
+
+(These values actually don't tell much about difficulty, but rather which levels I prefer.)
