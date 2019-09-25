@@ -44,7 +44,5 @@ A: Ah, the only real interesting question:
 * 1: 150
 * 2: 116
 * 3: 125
-* 4: 110
+* 4: 147
 * 5: 107
-
-(These values actually don't tell much about difficulty, but rather which levels I prefer.)
