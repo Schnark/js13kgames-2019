@@ -43,6 +43,6 @@ Q: What are your records?
 A: Ah, the only real interesting question:
 * 1: 150
 * 2: 116
-* 3: 125
+* 3: 142
 * 4: 147
 * 5: 133
