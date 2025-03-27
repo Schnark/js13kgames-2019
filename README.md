@@ -44,5 +44,5 @@ A: Ah, the only real interesting question:
 * 1: 247
 * 2: 116
 * 3: 243
-* 4: 147
+* 4: 188
 * 5: 166
