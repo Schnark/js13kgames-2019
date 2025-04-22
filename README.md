@@ -42,7 +42,7 @@ A: HSL colors are great, they are much easier to choose than RGB.
 Q: What are your records?  
 A: Ah, the only real interesting question:
 * 1: 247
-* 2: 116
+* 2: 186
 * 3: 243
 * 4: 188
 * 5: 166
