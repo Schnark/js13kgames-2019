@@ -45,4 +45,4 @@ A: Ah, the only real interesting question:
 * 2: 186
 * 3: 243
 * 4: 188
-* 5: 166
+* 5: 173
